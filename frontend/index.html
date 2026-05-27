@@ -1,0 +1,1256 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>投标工具</title>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <style>
+      :root {
+        --macaron-cream: #FFF9F5;
+        --macaron-mint: #A8E6CF;
+        --macaron-mint-dark: #88D8B0;
+        --macaron-coral: #FF9A8B;
+        --macaron-coral-dark: #FF8A7A;
+        --macaron-sky: #7EC8E3;
+        --macaron-sky-dark: #6BB8D3;
+        --macaron-lavender: #C3B1E1;
+        --macaron-lavender-dark: #B19FD0;
+        --macaron-peach: #FFB7B2;
+        --macaron-lemon: #FFEAA7;
+        --macaron-text: #5D5A6D;
+        --macaron-text-light: #8B8899;
+        --macaron-border: #F0E6E3;
+        --macaron-card-bg: #FFFFFF;
+
+        font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif;
+        line-height: 1.6;
+        font-weight: 400;
+      }
+      body {
+        margin: 0;
+        padding: 0;
+        min-width: 320px;
+        min-height: 100vh;
+        background: linear-gradient(135deg, var(--macaron-cream) 0%, #FFF5EE 100%);
+        color: var(--macaron-text);
+      }
+      .copy-btn {
+        background: transparent;
+        border: none;
+        cursor: pointer;
+        color: var(--macaron-text-light);
+        font-size: 14px;
+        transition: color 0.2s;
+        padding: 0;
+      }
+      .copy-btn:hover {
+        color: var(--macaron-mint);
+      }
+      #app {
+        width: 100%;
+        height: 100vh;
+        overflow: hidden;
+        display: flex;
+      }
+      .sidebar {
+        width: 220px;
+        background: linear-gradient(180deg, #A8E6CF 0%, #88D8B0 50%, #7DD3C0 100%);
+        padding: 20px 0;
+        display: flex;
+        flex-direction: column;
+        box-shadow: 4px 0 20px rgba(168, 230, 207, 0.3);
+        position: relative;
+        overflow: hidden;
+      }
+      .sidebar::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        right: 0;
+        width: 1px;
+        height: 100%;
+        background: linear-gradient(180deg, transparent, rgba(255,255,255,0.3), transparent);
+      }
+      .sidebar-header {
+        padding: 0 20px 20px;
+        border-bottom: 1px solid rgba(255,255,255,0.2);
+        margin-bottom: 16px;
+      }
+      .sidebar-title {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .logo-icon-wrapper {
+        width: 40px;
+        height: 40px;
+        background: rgba(255, 255, 255, 0.25);
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        backdrop-filter: blur(10px);
+      }
+      .logo-icon {
+        width: 24px;
+        height: 24px;
+        color: white;
+      }
+      .sidebar-title-text {
+        font-size: 20px;
+        font-weight: 700;
+        color: white;
+        letter-spacing: 0.5px;
+      }
+      .sidebar-menu {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+        flex: 1;
+        padding: 0 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      .sidebar-menu li {
+        margin-bottom: 4px;
+      }
+      .sidebar-menu button {
+        width: 100%;
+        padding: 14px 16px;
+        border: none;
+        background: transparent;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        font-size: 15px;
+        font-weight: 500;
+        color: rgba(255,255,255,0.85);
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        text-align: left;
+        border-radius: 12px;
+        position: relative;
+        overflow: hidden;
+      }
+      .sidebar-menu button::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(255, 255, 255, 0);
+        transition: all 0.3s ease;
+        border-radius: 12px;
+      }
+      .sidebar-menu button:hover {
+        color: white;
+      }
+      .sidebar-menu button:hover::before {
+        background: rgba(255, 255, 255, 0.15);
+      }
+      .sidebar-menu button.active {
+        background: linear-gradient(135deg, #FF9A8B 0%, #FFB7B2 100%);
+        color: white;
+        box-shadow: 0 4px 15px rgba(255, 154, 139, 0.4);
+      }
+      .sidebar-menu button.active::before {
+        display: none;
+      }
+      .sidebar-menu button .menu-icon {
+        width: 22px;
+        height: 22px;
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .sidebar-menu button .menu-icon svg {
+        width: 100%;
+        height: 100%;
+      }
+      .sidebar-footer {
+        padding: 16px 20px;
+        border-top: 1px solid rgba(255,255,255,0.2);
+        margin-top: auto;
+      }
+      .main-content {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        max-width: 1000px;
+        margin: 0 auto;
+        width: 100%;
+      }
+      .main-header {
+        background: white;
+        padding: 0 30px;
+        height: 64px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        box-shadow: 0 2px 20px rgba(0, 0, 0, 0.04);
+        border-bottom: 1px solid rgba(168, 230, 207, 0.2);
+      }
+      .page-title {
+        font-size: 22px;
+        font-weight: 600;
+        color: var(--macaron-text);
+      }
+      .page-subtitle {
+        font-size: 13px;
+        color: var(--macaron-text-light);
+        margin-top: 2px;
+      }
+      .content-area {
+        flex: 1;
+        padding: 24px 30px;
+        overflow-y: auto;
+      }
+      .btn {
+        padding: 10px 20px;
+        border-radius: 12px;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        border: none;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+      }
+      .btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 16px rgba(0, 0, 0, 0.12);
+      }
+      .btn-primary {
+        background: linear-gradient(135deg, var(--macaron-coral) 0%, var(--macaron-peach) 100%);
+        color: white;
+      }
+      .btn-secondary {
+        background: linear-gradient(135deg, var(--macaron-lavender) 0%, #D4C4F0 100%);
+        color: white;
+      }
+      .btn-success {
+        background: linear-gradient(135deg, var(--macaron-mint) 0%, var(--macaron-mint-dark) 100%);
+        color: white;
+      }
+      .form-control {
+        width: 100%;
+        padding: 10px 14px;
+        border: 2px solid var(--macaron-border);
+        border-radius: 10px;
+        font-size: 14px;
+        transition: all 0.3s ease;
+        background: white;
+        color: var(--macaron-text);
+      }
+      .form-control:focus {
+        outline: none;
+        border-color: var(--macaron-mint);
+        box-shadow: 0 0 0 3px rgba(168,230,207,0.3);
+      }
+      .form-control::placeholder {
+        color: var(--macaron-text-light);
+      }
+      .card {
+        background: var(--macaron-card-bg);
+        border-radius: 16px;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+        border: 1px solid var(--macaron-border);
+        padding: 28px;
+        margin-bottom: 24px;
+      }
+      .card-header {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 24px;
+        padding-bottom: 16px;
+        border-bottom: 1px solid var(--macaron-border);
+      }
+      .card-icon {
+        width: 44px;
+        height: 44px;
+        border-radius: 14px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: linear-gradient(135deg, rgba(168,230,207,0.2) 0%, rgba(126,200,227,0.15) 100%);
+      }
+      .card-icon svg {
+        width: 24px;
+        height: 24px;
+        color: var(--macaron-mint-dark);
+      }
+      .card-title {
+        font-size: 18px;
+        font-weight: 600;
+        color: var(--macaron-text);
+      }
+      .card-desc {
+        font-size: 13px;
+        color: var(--macaron-text-light);
+        margin-top: 2px;
+      }
+      .form-row {
+        display: flex;
+        align-items: center;
+        margin-bottom: 16px;
+        gap: 16px;
+      }
+      .form-row label {
+        width: 120px;
+        font-weight: 600;
+        text-align: right;
+        flex-shrink: 0;
+        color: var(--macaron-text);
+      }
+      .file-upload-container { flex: 1; display: flex; gap: 12px; align-items: center; }
+      .file-input { display: none; }
+      .result-section {
+        margin-top: 24px;
+        padding: 20px;
+        background: linear-gradient(135deg, rgba(168,230,207,0.1) 0%, rgba(126,200,227,0.05) 100%);
+        border-radius: 12px;
+        border: 1px solid var(--macaron-border);
+      }
+      .price-range-container { display: flex; align-items: center; gap: 12px; flex: 1; }
+      .price-input { width: 120px; text-align: center; }
+      .radio-group { display: flex; gap: 24px; align-items: center; }
+      .radio-group label { cursor: pointer; width: auto !important; text-align: left !important; }
+      .upload-section {
+        margin-bottom: 24px;
+        padding: 24px;
+        background: linear-gradient(135deg, rgba(168,230,207,0.08) 0%, rgba(126,200,227,0.05) 100%);
+        border-radius: 12px;
+        border: 1px solid var(--macaron-border);
+      }
+      .results-list { display: flex; flex-direction: column; gap: 16px; }
+      .result-item {
+        background: white;
+        padding: 16px;
+        border-radius: 10px;
+        border: 1px solid var(--macaron-border);
+      }
+      .result-place { font-weight: 600; color: var(--macaron-coral); font-size: 15px; }
+      .result-location {
+        font-size: 12px;
+        color: var(--macaron-text-light);
+        padding: 2px 8px;
+        background: rgba(126,200,227,0.15);
+        border-radius: 12px;
+        margin-left: 8px;
+      }
+      .result-text { font-size: 14px; line-height: 1.5; color: var(--macaron-text); margin-top: 8px; }
+      .place-management-section {
+        margin-top: 24px;
+        background: linear-gradient(135deg, rgba(168,230,207,0.08) 0%, rgba(195,177,225,0.05) 100%);
+        border-radius: 12px;
+        border: 1px solid var(--macaron-border);
+        overflow: hidden;
+      }
+      .management-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 16px 20px;
+        cursor: pointer;
+      }
+      .management-header:hover { background: rgba(0,0,0,0.02); }
+      .expand-icon { font-size: 12px; color: var(--macaron-text-light); transition: transform 0.3s ease; }
+      .expand-icon.rotated { transform: rotate(180deg); }
+      .region-tags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        background: white;
+        padding: 16px;
+        border: 1px solid var(--macaron-border);
+        border-radius: 10px;
+      }
+      .region-tag {
+        display: inline-flex;
+        align-items: center;
+        background: linear-gradient(135deg, rgba(168,230,207,0.1) 0%, rgba(126,200,227,0.1) 100%);
+        border: 1px solid var(--macaron-border);
+        border-radius: 20px;
+        padding: 8px 14px;
+        font-size: 14px;
+      }
+      .delete-btn {
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+        color: white;
+        border: none;
+        font-size: 14px;
+        cursor: pointer;
+        margin-left: 8px;
+        opacity: 0;
+        transition: opacity 0.2s ease;
+      }
+      .region-tag:hover .delete-btn { opacity: 1; }
+      .result-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+      .result-badge {
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-size: 12px;
+        font-weight: 600;
+      }
+      .result-badge.success { background: rgba(168,230,207,0.3); color: #27ae60; }
+      .result-badge.info { background: rgba(126,200,227,0.3); color: #3498db; }
+      .form-row.btn-center { justify-content: center; }
+      .form-row.btn-center button { margin-left: 0; }
+      .form-row.flex-right { justify-content: flex-end; }
+      .form-row.flex-right label { text-align: left; width: auto; margin-right: 8px; }
+      .form-control.narrow-input { max-width: 180px; }
+      .form-row.full-row { justify-content: flex-start; gap: 12px; }
+      .form-row.full-row label { text-align: left; width: auto; font-weight: 600; color: var(--macaron-text); white-space: nowrap; }
+      .region-header { display: flex; justify-content: space-between; align-items: center; cursor: pointer; padding: 8px 0; }
+      .region-header h5 { margin: 0; }
+      .modal-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0,0,0,0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+      }
+      .modal-content {
+        background: white;
+        border-radius: 16px;
+        width: 90%;
+        max-width: 500px;
+        overflow: hidden;
+        box-shadow: 0 20px 60px rgba(0,0,0,0.15);
+      }
+      .modal-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 20px 24px;
+        border-bottom: 1px solid var(--macaron-border);
+        background: linear-gradient(135deg, rgba(168,230,207,0.08) 0%, rgba(195,177,225,0.05) 100%);
+      }
+      .modal-header h3 { margin: 0; font-size: 18px; color: var(--macaron-text); }
+      .modal-close {
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        border: none;
+        background: rgba(0,0,0,0.05);
+        color: var(--macaron-text-light);
+        font-size: 20px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+      }
+      .modal-close:hover { background: rgba(0,0,0,0.1); }
+      .modal-body { padding: 24px; }
+      .modal-footer {
+        display: flex;
+        justify-content: flex-end;
+        gap: 12px;
+        padding: 20px 24px;
+        border-top: 1px solid var(--macaron-border);
+      }
+      .settings-section {
+        background: linear-gradient(135deg, rgba(168,230,207,0.05) 0%, rgba(195,177,225,0.03) 100%);
+        padding: 20px;
+        border-radius: 12px;
+        border: 1px solid var(--macaron-border);
+      }
+      .settings-section h4 {
+        margin: 0 0 20px 0;
+        font-size: 15px;
+        color: var(--macaron-text);
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <aside class="sidebar">
+        <div class="sidebar-header">
+          <div class="sidebar-title">
+            <div class="logo-icon-wrapper">
+              <svg class="logo-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/>
+                <circle cx="12" cy="12" r="5" stroke="currentColor" stroke-width="2"/>
+                <circle cx="12" cy="12" r="1" fill="currentColor"/>
+              </svg>
+            </div>
+            <span class="sidebar-title-text">投标工具</span>
+          </div>
+        </div>
+        <ul class="sidebar-menu">
+          <li>
+            <button :class="{ active: activeTab === 'price-adjustment' }" @click="activeTab = 'price-adjustment'">
+              <span class="menu-icon">
+                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <rect x="3" y="3" width="7" height="7" rx="2" stroke="currentColor" stroke-width="2"/>
+                  <rect x="14" y="3" width="7" height="7" rx="2" stroke="currentColor" stroke-width="2"/>
+                  <rect x="3" y="14" width="7" height="7" rx="2" stroke="currentColor" stroke-width="2"/>
+                  <rect x="14" y="14" width="7" height="7" rx="2" stroke="currentColor" stroke-width="2"/>
+                </svg>
+              </span>
+              <span>价格调整</span>
+            </button>
+          </li>
+          <li>
+            <button :class="{ active: activeTab === 'place-search' }" @click="activeTab = 'place-search'">
+              <span class="menu-icon">
+                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <circle cx="11" cy="11" r="6" stroke="currentColor" stroke-width="2"/>
+                  <path d="M20 20L15.5 15.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                </svg>
+              </span>
+              <span>地名查询</span>
+            </button>
+          </li>
+          <li>
+            <button :class="{ active: activeTab === 'bid-analysis' }" @click="activeTab = 'bid-analysis'">
+              <span class="menu-icon">
+                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                  <polyline points="14 2 14 8 20 8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                  <line x1="16" y1="13" x2="8" y2="13" stroke="currentColor" stroke-width="2"/>
+                  <line x1="16" y1="17" x2="8" y2="17" stroke="currentColor" stroke-width="2"/>
+                  <polyline points="10 9 9 9 8 9" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                </svg>
+              </span>
+              <span>招标解析</span>
+            </button>
+          </li>
+          <li>
+            <button :class="{ active: activeTab === 'settings' }" @click="activeTab = 'settings'">
+              <span class="menu-icon">
+                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/>
+                  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </span>
+              <span>设置</span>
+            </button>
+          </li>
+        </ul>
+      </aside>
+      
+      <main class="main-content">
+        <header class="main-header">
+          <div>
+            <div class="page-title">{{ tabTitle }}</div>
+            <div class="page-subtitle">{{ tabSubtitle }}</div>
+          </div>
+        </header>
+        <div class="content-area">
+          <div v-if="activeTab === 'price-adjustment'" class="card">
+            <div class="card-header">
+              <div class="card-icon">
+                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <rect x="3" y="3" width="7" height="7" rx="2" stroke="currentColor" stroke-width="2"/>
+                  <rect x="14" y="3" width="7" height="7" rx="2" stroke="currentColor" stroke-width="2"/>
+                  <rect x="3" y="14" width="7" height="7" rx="2" stroke="currentColor" stroke-width="2"/>
+                  <rect x="14" y="14" width="7" height="7" rx="2" stroke="currentColor" stroke-width="2"/>
+                </svg>
+              </div>
+              <div>
+                <div class="card-title">价格调整</div>
+                <div class="card-desc">设置目标总价，自动调整各项报价</div>
+              </div>
+            </div>
+            <div class="upload-section">
+              <div class="form-row">
+                <label>目标总价：</label>
+                <input type="number" v-model.number="targetTotalPrice" min="0" step="0.01" class="form-control" placeholder="请输入目标总价" />
+              </div>
+              <div class="form-row">
+                <label>上传文件：</label>
+                <div class="file-upload-container">
+                  <input type="text" v-model="selectedFilePath" readonly class="form-control" placeholder="请选择Excel文件" style="max-width: 300px; flex: 0 1 300px;" />
+                  <input type="file" id="excelFile" accept=".xlsx,.xls" class="file-input" @change="handleFileSelect" />
+                  <button type="button" class="btn btn-secondary" @click="openFileDialog">选择文件</button>
+                  <button type="button" class="btn btn-secondary" @click="downloadTemplate">下载模板</button>
+                </div>
+              </div>
+              <div class="form-row">
+                <label>是否限价：</label>
+                <div class="radio-group">
+                  <label><input type="radio" v-model="limitPrice" :value="false" /> 否</label>
+                  <label><input type="radio" v-model="limitPrice" :value="true" /> 是</label>
+                </div>
+              </div>
+              <div class="form-row">
+                <label>价格浮动区间：</label>
+                <div class="price-range-container">
+                  <input type="number" v-model.number="priceMin" min="0" max="100" class="form-control price-input" placeholder="下限(%)" />
+                  <span>-</span>
+                  <input type="number" v-model.number="priceMax" min="0" max="100" class="form-control price-input" placeholder="上限(%)" />
+                </div>
+              </div>
+              <div class="form-row btn-center">
+                <button @click="processExcel" class="btn btn-primary">开始处理</button>
+              </div>
+            </div>
+            <div v-if="processedFileUrl" class="result-section">
+              <div class="result-header">
+                <h4>处理结果</h4>
+                <span class="result-badge success">✓ 处理完成</span>
+              </div>
+              <p>文件处理完成，点击下方链接下载处理后的文件：</p>
+              <a :href="processedFileUrl" :download="processedFileName" class="btn btn-success">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                  <polyline points="7 10 12 15 17 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                  <line x1="12" y1="15" x2="12" y2="3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                </svg>
+                <span>下载文件</span>
+              </a>
+            </div>
+          </div>
+
+          <div v-if="activeTab === 'place-search'" class="card">
+            <div class="card-header">
+              <div class="card-icon">
+                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <circle cx="11" cy="11" r="6" stroke="currentColor" stroke-width="2"/>
+                  <path d="M20 20L15.5 15.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                </svg>
+              </div>
+              <div>
+                <div class="card-title">地名查询</div>
+                <div class="card-desc">上传文档自动识别地名信息</div>
+              </div>
+            </div>
+            <div class="upload-section">
+              <div class="form-row">
+                <label>上传文件：</label>
+                <div class="file-upload-container">
+                  <input type="text" v-model="selectedPlaceFilePath" readonly class="form-control" placeholder="请选择文件" style="max-width: 300px; flex: 0 1 300px;" />
+                  <input type="file" id="placeFile" accept=".doc,.docx,.xls,.xlsx" class="file-input" @change="handlePlaceFileSelect" />
+                  <button type="button" class="btn btn-secondary" @click="openPlaceFileDialog">选择文件</button>
+                </div>
+              </div>
+              <div class="form-row">
+                <label>自定义关键词：</label>
+                <input type="text" v-model="customKeywords" class="form-control" placeholder="多个关键词用逗号分隔" />
+              </div>
+              <div class="form-row btn-center">
+                <button @click="searchPlaces" class="btn btn-primary">开始查询</button>
+              </div>
+              <div v-if="placeResults.length > 0" class="result-section">
+                <div class="result-header">
+                  <h4>查询结果</h4>
+                  <span class="result-badge info">找到 {{ placeResults.length }} 个匹配</span>
+                </div>
+                <div class="results-list">
+                  <div v-for="(result, index) in placeResults" :key="index" class="result-item">
+                    <span class="result-place">{{ result.place }}</span>
+                    <span class="result-location">{{ result.location }}</span>
+                    <div class="result-text">{{ result.text }}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="place-management-section">
+              <div class="management-header" @click="expandStates.management = !expandStates.management">
+                <h4>地名管理</h4>
+                <div class="expand-icon" :class="{ rotated: expandStates.management }">▼</div>
+              </div>
+              <div v-if="expandStates.management" style="padding: 16px;">
+                <h5>添加地名</h5>
+                <div class="form-row full-row" style="margin-bottom: 16px;">
+                  <label>地名：</label>
+                  <input type="text" v-model="newPlace" class="form-control narrow-input" placeholder="请输入地名" />
+                  <label>级别：</label>
+                  <select v-model="placeLevel" class="form-control narrow-input">
+                    <option value="市级">市级</option>
+                    <option value="区级">区级</option>
+                  </select>
+                  <button @click="addPlace" class="btn btn-primary">添加地名</button>
+                </div>
+
+                <div>
+                  <div class="region-header" @click="expandStates.province = !expandStates.province">
+                    <h5>省级行政区</h5>
+                    <span class="expand-icon" :class="{ rotated: expandStates.province }">▼</span>
+                  </div>
+                  <div v-if="expandStates.province" class="region-tags">
+                    <div v-for="(place, index) in allPlaces.provinces" :key="index" class="region-tag">
+                      <span>{{ place.name || place }}</span>
+                      <button v-if="place.name && !['北京市','上海市','天津市','重庆市'].includes(place.name)" @click="deletePlace(place.name || place, '省级')" class="delete-btn">×</button>
+                    </div>
+                  </div>
+                </div>
+                <div>
+                  <div class="region-header" @click="expandStates.city = !expandStates.city">
+                    <h5>市级行政区</h5>
+                    <span class="expand-icon" :class="{ rotated: expandStates.city }">▼</span>
+                  </div>
+                  <div v-if="expandStates.city" class="region-tags">
+                    <div v-for="(place, index) in allPlaces.cities" :key="index" class="region-tag">
+                      <span>{{ place }}</span>
+                      <button @click="deletePlace(place, '市级')" class="delete-btn">×</button>
+                    </div>
+                  </div>
+                </div>
+                <div>
+                  <div class="region-header" @click="expandStates.district = !expandStates.district">
+                    <h5>区级行政区</h5>
+                    <span class="expand-icon" :class="{ rotated: expandStates.district }">▼</span>
+                  </div>
+                  <div v-if="expandStates.district" class="region-tags">
+                    <div v-for="(place, index) in allPlaces.districts" :key="index" class="region-tag">
+                      <span>{{ place }}</span>
+                      <button @click="deletePlace(place, '区级')" class="delete-btn">×</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div v-if="activeTab === 'settings'" class="card">
+            <div class="card-header">
+              <div class="card-icon">
+                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/>
+                  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </div>
+              <div>
+                <div class="card-title">系统设置</div>
+                <div class="card-desc">配置AI模型参数和系统选项</div>
+              </div>
+            </div>
+            <div class="settings-section">
+              <h4>🤖 AI模型配置</h4>
+              <div class="form-row">
+                <label>默认模型：</label>
+                <select v-model="aiConfig.default_model" class="form-control">
+                  <option value="deepseek">DeepSeek</option>
+                  <option value="aliyun">阿里云通义千问</option>
+                  <option value="volcengine">火山引擎豆包</option>
+                  <option value="kimi">Kimi</option>
+                  <option value="glm">GLM-4</option>
+                  <option value="minimax">Minimax</option>
+                  <option value="openai">OpenAI</option>
+                  <option value="siliconflow">硅基流动 (SiliconFlow)</option>
+                </select>
+              </div>
+              <div class="form-row">
+                <label>API密钥：</label>
+                <input type="password" v-model="aiConfig.models[aiConfig.default_model].api_key" class="form-control" placeholder="请输入API密钥" />
+              </div>
+              <div class="form-row">
+                <label>API地址：</label>
+                <input type="text" v-model="aiConfig.models[aiConfig.default_model].api_base" class="form-control" placeholder="API端点地址" />
+              </div>
+              <div class="form-row">
+                <label>模型名称：</label>
+                <input type="text" v-model="aiConfig.models[aiConfig.default_model].model" class="form-control" placeholder="模型名称" />
+              </div>
+              <div class="form-row btn-center">
+                <button @click="saveAIConfig" class="btn btn-primary">保存配置</button>
+              </div>
+            </div>
+          </div>
+
+          <div v-if="activeTab === 'bid-analysis'" class="card">
+            <div class="card-header">
+              <div class="card-icon">
+                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                  <polyline points="14 2 14 8 20 8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                  <line x1="16" y1="13" x2="8" y2="13" stroke="currentColor" stroke-width="2"/>
+                  <line x1="16" y1="17" x2="8" y2="17" stroke="currentColor" stroke-width="2"/>
+                  <polyline points="10 9 9 9 8 9" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                </svg>
+              </div>
+              <div>
+                <div class="card-title">招标解析</div>
+                <div class="card-desc">上传招标公告或输入URL，AI自动解析关键信息</div>
+              </div>
+            </div>
+            <div class="upload-section">
+              <div class="form-row">
+                <label>公告URL：</label>
+                <input type="text" v-model="bidUrl" class="form-control" placeholder="请输入招标公告网页地址" />
+              </div>
+              <div class="form-row">
+                <label>上传文件：</label>
+                <div class="file-upload-container">
+                  <input type="text" v-model="selectedBidFilePath" readonly class="form-control" placeholder="请选择doc、docx、pdf文件" style="max-width: 300px; flex: 0 1 300px;" />
+                  <input type="file" id="bidFile" accept=".doc,.docx,.pdf" class="file-input" @change="handleBidFileSelect" />
+                  <button type="button" class="btn btn-secondary" @click="openBidFileDialog">选择文件</button>
+                </div>
+              </div>
+              <div class="form-row btn-center">
+                <button @click="parseBidDocument" class="btn btn-primary" :disabled="isBidParsing">
+                  <span v-if="isBidParsing">⏳</span>
+                  <span v-else>🔍</span>
+                  {{ isBidParsing ? '解析中...' : '开始解析' }}
+                </button>
+              </div>
+            </div>
+
+            <div v-if="bidParseResult" class="result-section">
+              <div class="result-header">
+                <div style="display: flex; align-items: center; gap: 12px;">
+                  <h4>解析结果</h4>
+                  <span v-if="bidProjectName" style="background: linear-gradient(135deg, var(--macaron-mint) 0%, var(--macaron-teal) 100%); color: white; padding: 4px 12px; border-radius: 20px; font-size: 13px; font-weight: 500;">
+                    {{ bidProjectName }}
+                  </span>
+                </div>
+                <div style="display: flex; gap: 12px;">
+                  <button @click="saveBidProject" class="btn btn-success" style="padding: 6px 14px; font-size: 13px;">
+                    <span>💾</span> 保存项目
+                  </button>
+                  <button @click="copyBidResult" class="btn btn-secondary" style="padding: 6px 14px; font-size: 13px;">
+                    <span>📋</span> 复制结果
+                  </button>
+                </div>
+              </div>
+              <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin-bottom: 20px;">
+                <div style="background: white; padding: 16px; border-radius: 10px; border: 1px solid var(--macaron-border); position: relative;">
+                  <div style="font-size: 13px; color: var(--macaron-text-light); margin-bottom: 8px;">项目名称</div>
+                  <div style="font-size: 15px; font-weight: 600; color: var(--macaron-coral);">{{ bidProjectName || '-' }}</div>
+                  <button v-if="bidProjectName" @click="copyText(bidProjectName)" class="copy-btn" style="position: absolute; bottom: 12px; right: 12px; padding: 4px 10px; font-size: 12px; background: var(--macaron-mint); color: white; border: none; border-radius: 4px; cursor: pointer;">复制</button>
+                </div>
+                <div style="background: white; padding: 16px; border-radius: 10px; border: 1px solid var(--macaron-border); position: relative;">
+                  <div style="font-size: 13px; color: var(--macaron-text-light); margin-bottom: 8px;">项目编号</div>
+                  <div style="font-size: 15px; font-weight: 600; color: var(--macaron-coral);">{{ bidParseResult.projectCode || '-' }}</div>
+                  <button v-if="bidParseResult.projectCode" @click="copyText(bidParseResult.projectCode)" class="copy-btn" style="position: absolute; bottom: 12px; right: 12px; padding: 4px 10px; font-size: 12px; background: var(--macaron-mint); color: white; border: none; border-radius: 4px; cursor: pointer;">复制</button>
+                </div>
+                <div style="background: white; padding: 16px; border-radius: 10px; border: 1px solid var(--macaron-border); position: relative;">
+                  <div style="font-size: 13px; color: var(--macaron-text-light); margin-bottom: 8px;">开标日期</div>
+                  <div style="font-size: 15px; font-weight: 600; color: var(--macaron-coral);">{{ bidParseResult.bidDate || '-' }}</div>
+                  <button v-if="bidParseResult.bidDate" @click="copyText(bidParseResult.bidDate)" class="copy-btn" style="position: absolute; bottom: 12px; right: 12px; padding: 4px 10px; font-size: 12px; background: var(--macaron-mint); color: white; border: none; border-radius: 4px; cursor: pointer;">复制</button>
+                </div>
+                <div style="background: white; padding: 16px; border-radius: 10px; border: 1px solid var(--macaron-border);">
+                  <div style="font-size: 13px; color: var(--macaron-text-light); margin-bottom: 8px;">开标时间</div>
+                  <div style="font-size: 15px; font-weight: 600; color: var(--macaron-coral);">{{ bidParseResult.bidTime || '-' }}</div>
+                </div>
+                <div style="background: white; padding: 16px; border-radius: 10px; border: 1px solid var(--macaron-border); position: relative;">
+                  <div style="font-size: 13px; color: var(--macaron-text-light); margin-bottom: 8px;">招标人名称</div>
+                  <div style="font-size: 15px; font-weight: 600; color: var(--macaron-coral);">{{ bidParseResult.bidderName || '-' }}</div>
+                  <button v-if="bidParseResult.bidderName" @click="copyText(bidParseResult.bidderName)" class="copy-btn" style="position: absolute; bottom: 12px; right: 12px; padding: 4px 10px; font-size: 12px; background: var(--macaron-mint); color: white; border: none; border-radius: 4px; cursor: pointer;">复制</button>
+                </div>
+                <div style="background: white; padding: 16px; border-radius: 10px; border: 1px solid var(--macaron-border); position: relative;">
+                  <div style="font-size: 13px; color: var(--macaron-text-light); margin-bottom: 8px;">代理机构</div>
+                  <div style="font-size: 15px; font-weight: 600; color: var(--macaron-coral);">{{ bidParseResult.agencyName || '-' }}</div>
+                  <button v-if="bidParseResult.agencyName" @click="copyText(bidParseResult.agencyName)" class="copy-btn" style="position: absolute; bottom: 12px; right: 12px; padding: 4px 10px; font-size: 12px; background: var(--macaron-mint); color: white; border: none; border-radius: 4px; cursor: pointer;">复制</button>
+                </div>
+                <div style="background: white; padding: 16px; border-radius: 10px; border: 1px solid var(--macaron-border); position: relative;">
+                  <div style="font-size: 13px; color: var(--macaron-text-light); margin-bottom: 8px;">预算金额</div>
+                  <div style="font-size: 15px; font-weight: 600; color: var(--macaron-coral);">{{ bidParseResult.budgetAmount || '-' }}</div>
+                  <button v-if="bidParseResult.budgetAmount" @click="copyText(bidParseResult.budgetAmount)" class="copy-btn" style="position: absolute; bottom: 12px; right: 12px; padding: 4px 10px; font-size: 12px; background: var(--macaron-mint); color: white; border: none; border-radius: 4px; cursor: pointer;">复制</button>
+                </div>
+              </div>
+              <div style="background: white; padding: 20px; border-radius: 10px; border: 1px solid var(--macaron-border); margin-bottom: 16px;">
+                <h5 style="margin: 0 0 12px 0; font-size: 14px; color: var(--macaron-text);">📋 废标项</h5>
+                <ul style="margin: 0; padding-left: 20px;">
+                  <li v-for="(item, index) in bidParseResult.disqualificationItems" :key="index" style="margin-bottom: 8px; font-size: 14px;">{{ item }}</li>
+                  <li v-if="!bidParseResult.disqualificationItems || bidParseResult.disqualificationItems.length === 0" style="color: var(--macaron-text-light);">暂无数据</li>
+                </ul>
+              </div>
+              <div style="background: white; padding: 20px; border-radius: 10px; border: 1px solid var(--macaron-border); margin-bottom: 16px;">
+                <h5 style="margin: 0 0 12px 0; font-size: 14px; color: var(--macaron-text);">📊 评分标准</h5>
+                <ul style="margin: 0; padding-left: 20px;">
+                  <li v-for="(item, index) in bidParseResult.evaluationCriteria" :key="index" style="margin-bottom: 8px; font-size: 14px;">{{ item }}</li>
+                  <li v-if="!bidParseResult.evaluationCriteria || bidParseResult.evaluationCriteria.length === 0" style="color: var(--macaron-text-light);">暂无数据</li>
+                </ul>
+              </div>
+              <div v-if="bidParseResult.otherInfo" style="background: white; padding: 20px; border-radius: 10px; border: 1px solid var(--macaron-border);">
+                <h5 style="margin: 0 0 12px 0; font-size: 14px; color: var(--macaron-text);">📝 其他信息</h5>
+                <p style="margin: 0; font-size: 14px; line-height: 1.6; white-space: pre-wrap;">{{ bidParseResult.otherInfo }}</p>
+              </div>
+            </div>
+
+            <div style="margin-top: 24px; background: linear-gradient(135deg, rgba(168,230,207,0.08) 0%, rgba(195,177,225,0.05) 100%); border-radius: 12px; border: 1px solid var(--macaron-border); padding: 20px;">
+              <h4 style="margin: 0 0 16px 0; font-size: 15px;">📁 历史项目</h4>
+              <div v-if="bidProjects.length === 0" style="text-align: center; padding: 30px 0; color: var(--macaron-text-light);">暂无历史项目</div>
+              <div v-else style="display: flex; flex-direction: column; gap: 10px; max-height: 300px; overflow-y: auto;">
+                <div 
+                  v-for="project in bidProjects" 
+                  :key="project.id"
+                  :class="{ active: selectedBidProject?.id === project.id }"
+                  style="background: white; padding: 14px; border-radius: 10px; border: 1px solid var(--macaron-border); cursor: pointer; transition: all 0.3s ease; display: flex; justify-content: space-between; align-items: center;"
+                  :style="selectedBidProject?.id === project.id ? { background: 'linear-gradient(135deg, rgba(168,230,207,0.1) 0%, rgba(126,200,227,0.1) 100%)', borderColor: 'var(--macaron-mint)' } : {}"
+                >
+                  <div @click="selectBidProject(project)">
+                    <div style="font-weight: 600; font-size: 14px; color: var(--macaron-text);">{{ project.name }}</div>
+                    <div style="font-size: 12px; color: var(--macaron-text-light);">{{ formatDate(project.created_at) }}</div>
+                  </div>
+                  <button 
+                    @click.stop="deleteBidProject(project.id)"
+                    style="padding: 4px 10px; font-size: 12px; background: #FF6B6B; color: white; border: none; border-radius: 4px; cursor: pointer;"
+                  >
+                    删除
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+    <script>
+      const { ref, computed, reactive, onMounted } = Vue
+      const app = Vue.createApp({
+        setup() {
+          const activeTab = ref('price-adjustment')
+          const targetTotalPrice = ref(0)
+          const limitPrice = ref(false)
+          const priceMin = ref(50)
+          const priceMax = ref(95)
+          const processedFileUrl = ref('')
+          const processedFileName = ref('')
+          const selectedFilePath = ref('')
+          const selectedPlaceFilePath = ref('')
+          const customKeywords = ref('')
+          const placeResults = ref([])
+          const newPlace = ref('')
+          const placeLevel = ref('市级')
+          const allPlaces = ref({ provinces: [], cities: [], districts: [] })
+          const expandStates = reactive({
+            management: false,
+            province: true,
+            city: true,
+            district: true
+          })
+
+          const bidProjectName = ref('')
+          const bidUrl = ref('')
+          const selectedBidFilePath = ref('')
+          const isBidParsing = ref(false)
+          const bidParseResult = ref(null)
+          const bidProjects = ref([])
+          const selectedBidProject = ref(null)
+          const showSettings = ref(false)
+          const aiConfig = reactive({
+            default_model: 'deepseek',
+            models: {
+              deepseek: { api_key: '', api_base: 'https://api.deepseek.com/v1', model: 'deepseek-chat' },
+              aliyun: { api_key: '', api_base: 'https://dashscope.aliyuncs.com/api/text/chat', model: 'qwen-max' },
+              volcengine: { api_key: '', api_base: 'https://ark.cn-beijing.volces.com/api/text/chat', model: 'Doubao-3.5-128K' },
+              kimi: { api_key: '', api_base: 'https://api.moonshot.cn/v1', model: 'moonshot-v1-8k' },
+              glm: { api_key: '', api_base: 'https://open.bigmodel.cn/api/paas/v4/chat/completions', model: 'glm-4' },
+              minimax: { api_key: '', api_base: 'https://api.minimax.chat/v1/text/chatcompletion', model: 'abab6-chat' },
+              openai: { api_key: '', api_base: 'https://api.openai.com/v1', model: 'gpt-4o-mini' },
+              siliconflow: { api_key: '', api_base: 'https://api.siliconflow.cn/v1', model: 'Qwen/Qwen-2-7B-Instruct' }
+            }
+          })
+
+          const tabTitle = computed(() => {
+            if (activeTab.value === 'price-adjustment') return '价格调整'
+            if (activeTab.value === 'place-search') return '地名查询'
+            if (activeTab.value === 'bid-analysis') return '招标解析'
+            if (activeTab.value === 'settings') return '系统设置'
+            return ''
+          })
+
+          const tabSubtitle = computed(() => {
+            if (activeTab.value === 'price-adjustment') return '上传Excel文件，自动调整价格以达到目标总价'
+            if (activeTab.value === 'place-search') return '上传文档，自动识别地名信息'
+            if (activeTab.value === 'bid-analysis') return '上传招标公告或输入URL，AI自动解析关键信息'
+            if (activeTab.value === 'settings') return '配置AI模型参数和系统选项'
+            return ''
+          })
+
+          const formatDate = (dateString) => {
+            const date = new Date(dateString)
+            return date.toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' })
+          }
+
+          const handleFileSelect = (event) => {
+            const file = event.target.files[0]
+            if (file) selectedFilePath.value = file.path || file.name
+          }
+          const openFileDialog = () => document.querySelector('#excelFile').click()
+          const processExcel = async () => {
+            const file = document.querySelector('#excelFile').files[0]
+            if (!file) { alert('请选择Excel文件'); return }
+            if (!targetTotalPrice.value) { alert('请输入目标总价'); return }
+            const formData = new FormData()
+            formData.append('file', file)
+            formData.append('targetTotalPrice', targetTotalPrice.value)
+            formData.append('limitPrice', limitPrice.value)
+            formData.append('priceMin', priceMin.value)
+            formData.append('priceMax', priceMax.value)
+            const response = await fetch('/process-excel', { method: 'POST', body: formData })
+            if (response.ok) {
+              const blob = await response.blob()
+              processedFileUrl.value = URL.createObjectURL(blob)
+              processedFileName.value = 'NEW_' + file.name
+            } else { alert('文件处理失败') }
+          }
+          const downloadTemplate = () => {
+            const link = document.createElement('a')
+            link.href = '/分项报价表模板.xlsx'
+            link.download = '分项报价表模板.xlsx'
+            link.click()
+          }
+
+          const handlePlaceFileSelect = (event) => {
+            const file = event.target.files[0]
+            if (file) selectedPlaceFilePath.value = file.path || file.name
+          }
+          const openPlaceFileDialog = () => document.querySelector('#placeFile').click()
+          const searchPlaces = async () => {
+            const file = document.querySelector('#placeFile').files[0]
+            if (!file) { alert('请选择文件'); return }
+            const formData = new FormData()
+            formData.append('file', file)
+            if (customKeywords.value) {
+              customKeywords.value.split(',').forEach((kw, i) => formData.append(`keywords[${i}]`, kw.trim()))
+            }
+            const response = await fetch('/file-parse', { method: 'POST', body: formData })
+            if (response.ok) {
+              const data = await response.json()
+              placeResults.value = data.matches || []
+            } else { alert('文件处理失败') }
+          }
+
+          const loadPlaces = async () => {
+            try {
+              const response = await fetch('/api/places')
+              if (response.ok) {
+                const data = await response.json()
+                console.log('Loaded places:', data)
+                allPlaces.value = data
+              } else {
+                console.error('Failed to load places:', response.status)
+              }
+            } catch (error) {
+              console.error('Error loading places:', error)
+            }
+          }
+          const addPlace = async () => {
+            if (!newPlace.value) { alert('请输入地名'); return }
+            const response = await fetch('/api/places/add', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ place: newPlace.value, level: placeLevel.value })
+            })
+            if (response.ok) {
+              const data = await response.json()
+              if (data.success) { alert('添加成功'); newPlace.value = ''; loadPlaces() }
+              else alert('添加失败')
+            }
+          }
+          const deletePlace = async (place, level) => {
+            if (!confirm(`确定删除 "${place}" 吗？`)) return
+            const response = await fetch('/api/places/delete', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ place, level })
+            })
+            if (response.ok) { const data = await response.json(); if (data.success) loadPlaces() }
+          }
+
+          const handleBidFileSelect = (event) => {
+            const file = event.target.files[0]
+            if (file) selectedBidFilePath.value = file.path || file.name
+          }
+          const openBidFileDialog = () => document.querySelector('#bidFile').click()
+          const parseBidDocument = async () => {
+            if (!bidUrl.value && !selectedBidFilePath.value) {
+              alert('请输入招标公告URL或上传文件')
+              return
+            }
+            isBidParsing.value = true
+            bidParseResult.value = null
+            const formData = new FormData()
+            if (bidUrl.value) formData.append('url', bidUrl.value)
+            const file = document.querySelector('#bidFile').files[0]
+            if (file) formData.append('file', file)
+            const response = await fetch('/api/bid-assistant/parse', { method: 'POST', body: formData })
+            if (response.ok) {
+              const data = await response.json()
+              if (data.success) {
+                bidParseResult.value = data.result
+                if (data.projectName) {
+                  bidProjectName.value = data.projectName
+                }
+              } else {
+                alert('解析失败: ' + (data.message || '未知错误'))
+              }
+            } else {
+              alert('解析失败')
+            }
+            isBidParsing.value = false
+          }
+          const saveBidProject = async () => {
+            if (!bidParseResult.value) {
+              alert('请先解析招标公告')
+              return
+            }
+            if (!bidProjectName.value) {
+              alert('项目名称为空，请确保解析结果包含项目名称')
+              return
+            }
+            const response = await fetch('/api/bid-assistant/save', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                name: bidProjectName.value,
+                projectCode: bidParseResult.value.projectCode,
+                budgetAmount: bidParseResult.value.budgetAmount,
+                bidDate: bidParseResult.value.bidDate,
+                bidTime: bidParseResult.value.bidTime,
+                bidderName: bidParseResult.value.bidderName,
+                agencyName: bidParseResult.value.agencyName,
+                disqualificationItems: JSON.stringify(bidParseResult.value.disqualificationItems || []),
+                evaluationCriteria: JSON.stringify(bidParseResult.value.evaluationCriteria || []),
+                otherInfo: bidParseResult.value.otherInfo || ''
+              })
+            })
+            if (response.ok) {
+              const data = await response.json()
+              if (data.success) {
+                alert('保存成功')
+                loadBidProjects()
+              } else {
+                alert('保存失败: ' + (data.message || '未知错误'))
+              }
+            } else {
+              alert('保存失败')
+            }
+          }
+          const copyText = async (text) => {
+            if (!text) return
+            try {
+              if (navigator.clipboard && navigator.clipboard.writeText) {
+                await navigator.clipboard.writeText(text)
+                alert('已复制到剪贴板')
+              } else {
+                const textarea = document.createElement('textarea')
+                textarea.value = text
+                textarea.style.position = 'fixed'
+                textarea.style.left = '-9999px'
+                document.body.appendChild(textarea)
+                textarea.select()
+                document.execCommand('copy')
+                document.body.removeChild(textarea)
+                alert('已复制到剪贴板')
+              }
+            } catch (err) {
+              console.error('复制失败:', err)
+              alert('复制失败，请手动复制')
+            }
+          }
+          const copyBidResult = async () => {
+            if (!bidParseResult.value) return
+            const text = `项目名称：${bidProjectName.value}
+项目编号：${bidParseResult.value.projectCode || '-'}
+预算金额：${bidParseResult.value.budgetAmount || '-'}
+开标日期：${bidParseResult.value.bidDate || '-'}
+开标时间：${bidParseResult.value.bidTime || '-'}
+招标人名称：${bidParseResult.value.bidderName || '-'}
+代理机构：${bidParseResult.value.agencyName || '-'}
+
+废标项：
+${(bidParseResult.value.disqualificationItems || []).map((item, i) => `${i + 1}. ${item}`).join('\n') || '暂无'}
+
+评分标准：
+${(bidParseResult.value.evaluationCriteria || []).map((item, i) => `${i + 1}. ${item}`).join('\n') || '暂无'}
+
+其他信息：
+${bidParseResult.value.otherInfo || '暂无'}`
+            await navigator.clipboard.writeText(text)
+            alert('复制成功')
+          }
+          const loadBidProjects = async () => {
+            const response = await fetch('/api/bid-assistant/projects')
+            if (response.ok) {
+              const data = await response.json()
+              if (data.success) bidProjects.value = data.projects || []
+            }
+          }
+          const selectBidProject = (project) => {
+            selectedBidProject.value = project
+            bidParseResult.value = {
+              projectCode: project.projectCode,
+              budgetAmount: project.budgetAmount,
+              bidDate: project.bidDate,
+              bidTime: project.bidTime,
+              bidderName: project.bidderName,
+              agencyName: project.agencyName,
+              disqualificationItems: JSON.parse(project.disqualificationItems || '[]'),
+              evaluationCriteria: JSON.parse(project.evaluationCriteria || '[]'),
+              otherInfo: project.otherInfo
+            }
+            bidProjectName.value = project.name
+          }
+
+          const loadAIConfig = async () => {
+            const response = await fetch('/api/bid-assistant/config')
+            if (response.ok) {
+              const data = await response.json()
+              if (data.success && data.config) {
+                aiConfig.default_model = data.config.default_model || 'deepseek'
+                if (data.config.models) {
+                  Object.keys(data.config.models).forEach(model => {
+                    if (aiConfig.models[model]) {
+                      aiConfig.models[model].api_key = data.config.models[model].api_key || ''
+                      aiConfig.models[model].api_base = data.config.models[model].api_base || aiConfig.models[model].api_base
+                      aiConfig.models[model].model = data.config.models[model].model || aiConfig.models[model].model
+                    }
+                  })
+                }
+              }
+            }
+          }
+          const saveAIConfig = async () => {
+            const response = await fetch('/api/bid-assistant/config', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(aiConfig)
+            })
+            if (response.ok) {
+              const data = await response.json()
+              if (data.success) {
+                alert('配置保存成功')
+                showSettings.value = false
+              } else {
+                alert('保存失败: ' + (data.message || '未知错误'))
+              }
+            } else {
+              alert('保存失败')
+            }
+          }
+
+          onMounted(() => { loadPlaces(); loadBidProjects(); loadAIConfig() })
+          return {
+            activeTab, targetTotalPrice, limitPrice, priceMin, priceMax,
+            processedFileUrl, processedFileName, selectedFilePath,
+            selectedPlaceFilePath, customKeywords, placeResults,
+            newPlace, placeLevel, allPlaces, expandStates,
+            handleFileSelect, openFileDialog, processExcel, downloadTemplate,
+            handlePlaceFileSelect, openPlaceFileDialog, searchPlaces,
+            addPlace, deletePlace,
+            bidProjectName, bidUrl, selectedBidFilePath, isBidParsing,
+            bidParseResult, bidProjects, selectedBidProject, tabTitle, tabSubtitle,
+            handleBidFileSelect, openBidFileDialog, parseBidDocument,
+            saveBidProject, copyBidResult, copyText, selectBidProject, formatDate,
+            aiConfig, saveAIConfig
+          }
+        }
+      })
+      app.mount('#app')
+    </script>
+  </body>
+</html>

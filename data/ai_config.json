@@ -1,0 +1,45 @@
+{
+  "default_model": "siliconflow",
+  "models": {
+    "deepseek": {
+      "api_key": "sk-12d280aa8dc04877ad4798dd42021d6f",
+      "api_base": "https://api.deepseek.com/v1",
+      "model": "deepseek-v2-flash"
+    },
+    "aliyun": {
+      "api_key": "",
+      "api_base": "https://dashscope.aliyuncs.com/api/text/chat",
+      "model": "qwen-max"
+    },
+    "volcengine": {
+      "api_key": "",
+      "api_base": "https://ark.cn-beijing.volces.com/api/text/chat",
+      "model": "Doubao-3.5-128K"
+    },
+    "kimi": {
+      "api_key": "",
+      "api_base": "https://api.moonshot.cn/v1",
+      "model": "moonshot-v1-8k"
+    },
+    "glm": {
+      "api_key": "",
+      "api_base": "https://open.bigmodel.cn/api/paas/v4/chat/completions",
+      "model": "glm-4"
+    },
+    "minimax": {
+      "api_key": "",
+      "api_base": "https://api.minimax.chat/v1/text/chatcompletion",
+      "model": "abab6-chat"
+    },
+    "openai": {
+      "api_key": "",
+      "api_base": "https://api.openai.com/v1",
+      "model": "gpt-4o-mini"
+    },
+    "siliconflow": {
+      "api_key": "sk-fopghgyeusovbsuhlyoqapwtgopxvovcmofigpmomexzdver",
+      "api_base": "https://api.siliconflow.cn/v1",
+      "model": "Pro/zai-org/GLM-5.1"
+    }
+  }
+}

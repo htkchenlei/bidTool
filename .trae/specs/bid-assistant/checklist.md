@@ -1,0 +1,12 @@
+- [x] Checkpoint 1: 侧边栏成功添加"投标助手"导航按钮，点击可切换页面
+- [x] Checkpoint 2: 投标助手页面显示项目名称输入框、URL输入框和文件上传区域
+- [x] Checkpoint 3: 解析按钮点击后显示加载状态
+- [x] Checkpoint 4: 解析结果以结构化方式展示（开标日期、时间、招标人名称、代理机构名称、废标项、评分标准）
+- [x] Checkpoint 5: 一键复制按钮正常工作
+- [x] Checkpoint 6: 后端路由/api/bid-assistant/parse可正常访问
+- [x] Checkpoint 7: 文件解析功能支持doc、docx、pdf格式
+- [x] Checkpoint 8: URL解析功能正常工作
+- [x] Checkpoint 9: 错误处理友好，提示清晰
+- [x] Checkpoint 10: 解析结果可保存到本地数据库
+- [x] Checkpoint 11: 历史项目列表可正常显示
+- [x] Checkpoint 12: 可从历史项目列表中选择项目查看详情

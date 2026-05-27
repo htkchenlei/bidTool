@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  bid-tool:
+    build: .
+    container_name: bid-tool
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./china_regions.json:/app/china_regions.json
+    environment:
+      - FLASK_APP=app.py
+      - FLASK_ENV=production
+    restart: unless-stopped
