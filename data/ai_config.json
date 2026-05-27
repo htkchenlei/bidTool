@@ -2,7 +2,7 @@
   "default_model": "siliconflow",
   "models": {
     "deepseek": {
-      "api_key": "sk-12d280aa8dc04877ad4798dd42021d6f",
+      "api_key": "",
       "api_base": "https://api.deepseek.com/v1",
       "model": "deepseek-v2-flash"
     },
@@ -37,7 +37,7 @@
       "model": "gpt-4o-mini"
     },
     "siliconflow": {
-      "api_key": "sk-fopghgyeusovbsuhlyoqapwtgopxvovcmofigpmomexzdver",
+      "api_key": "",
       "api_base": "https://api.siliconflow.cn/v1",
       "model": "Pro/zai-org/GLM-5.1"
     }
