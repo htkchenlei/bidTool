@@ -1,0 +1,1439 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BidTool — 投标工具</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/css/main.css?v=2" />
+</head>
+<body>
+<div id="app" v-cloak>
+
+  <!-- ══════════════════ TOPBAR ══════════════════ -->
+  <header class="topbar">
+    <div class="topbar-brand">
+      <span class="topbar-logo">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+          <path d="M9 12h6M9 16h6M9 8h2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          <path d="M5 3a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8l-5-5H5z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M14 3v4a1 1 0 0 0 1 1h4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+      </span>
+      <span class="topbar-title">BidTool</span>
+      <span class="topbar-badge">投标工具</span>
+    </div>
+    <div class="topbar-center">
+      <div class="topbar-search">
+        <svg class="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none">
+          <circle cx="11" cy="11" r="8" stroke="currentColor" stroke-width="2"/>
+          <path d="m21 21-4.35-4.35" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+        <input type="text" placeholder="搜索功能..." v-model="searchQuery" />
+        <kbd>⌘K</kbd>
+      </div>
+    </div>
+    <div class="topbar-actions">
+      <div class="status-dot" :class="apiStatus ? 'status-dot--online' : 'status-dot--offline'">
+        <span class="dot-pulse"></span>
+        <span>{{ apiStatus ? '服务正常' : '服务离线' }}</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- ══════════════════ LAYOUT ══════════════════ -->
+  <div class="layout">
+
+    <!-- ══════════ SIDEBAR ══════════ -->
+    <aside class="sidebar" :class="{ 'sidebar--collapsed': sidebarCollapsed }">
+      <nav class="sidebar-nav">
+
+        <!-- ▸ 主功能 -->
+        <div class="nav-section">
+          <div class="nav-label">主功能</div>
+          <a
+            v-for="item in mainNavItems"
+            :key="item.id"
+            class="nav-item"
+            :class="{ 'nav-item--active': activeView === item.id }"
+            @click="setView(item.id)"
+          >
+            <span class="nav-item-icon" v-html="item.icon"></span>
+            <span class="nav-item-label">{{ item.label }}</span>
+          </a>
+        </div>
+
+        <!-- ▸ 辅助工具 -->
+        <a
+          v-for="item in toolNavItems"
+          :key="item.id"
+          class="nav-item"
+          :class="{ 'nav-item--active': activeView === item.id }"
+          @click="setView(item.id)"
+        >
+          <span class="nav-item-icon" v-html="item.icon"></span>
+          <span class="nav-item-label">{{ item.label }}</span>
+        </a>
+
+      </nav>
+
+      <div class="sidebar-footer">
+        <a class="nav-item" :class="{ 'nav-item--active': activeView === 'settings' }" @click="setView('settings')">
+          <span class="nav-item-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+              <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" stroke="currentColor" stroke-width="1.8"/>
+              <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.8"/>
+            </svg>
+          </span>
+          <span class="nav-item-label">设置</span>
+        </a>
+        <button class="sidebar-collapse-btn" @click="sidebarCollapsed = !sidebarCollapsed">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" :style="{ transform: sidebarCollapsed ? 'rotate(180deg)' : 'none' }">
+            <path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+      </div>
+    </aside>
+
+    <!-- ══════════ MAIN CONTENT ══════════ -->
+    <main class="main-content">
+
+      <!-- ▸ 工作台 -->
+      <div v-if="activeView === 'dashboard'" class="view-panel">
+        <div class="page-header">
+          <h1 class="page-title">工作台</h1>
+          <p class="page-subtitle">欢迎使用 BidTool，快速开始今天的工作</p>
+        </div>
+
+        <div class="stats-grid">
+          <div class="stat-card stat-card--pink">
+            <div class="stat-icon">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><polyline points="14,2 14,8 20,8" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+            </div>
+            <div class="stat-info">
+              <div class="stat-value">{{ fileCount }}</div>
+              <div class="stat-label">已上传文件</div>
+            </div>
+          </div>
+          <div class="stat-card stat-card--purple">
+            <div class="stat-icon">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M9 11l3 3L22 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+            <div class="stat-info">
+              <div class="stat-value">{{ analysisCount }}</div>
+              <div class="stat-label">招标分析</div>
+            </div>
+          </div>
+          <div class="stat-card stat-card--mint">
+            <div class="stat-icon">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><rect x="2" y="7" width="20" height="14" rx="2" ry="2" stroke="currentColor" stroke-width="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" stroke="currentColor" stroke-width="2"/></svg>
+            </div>
+            <div class="stat-info">
+              <div class="stat-value">{{ certCount }}</div>
+              <div class="stat-label">资质证书</div>
+            </div>
+          </div>
+          <div class="stat-card stat-card--peach">
+            <div class="stat-icon">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/><polyline points="12,6 12,12 16,14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            </div>
+            <div class="stat-info">
+              <div class="stat-value">{{ expiringSoonCount }}</div>
+              <div class="stat-label">即将到期</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="dashboard-grid">
+          <div class="dash-section">
+            <div class="section-header"><h3>快速操作</h3></div>
+            <div class="quick-actions">
+              <button class="quick-btn" @click="setView('files')">
+                <span class="qb-icon qb-icon--pink">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><polyline points="17,8 12,3 7,8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><line x1="12" y1="3" x2="12" y2="15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                </span>
+                <div>
+                  <div class="qb-title">上传文件</div>
+                  <div class="qb-desc">上传招标文件或相关资料</div>
+                </div>
+              </button>
+              <button class="quick-btn" @click="setView('analysis')">
+                <span class="qb-icon qb-icon--purple">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><polyline points="22,12 18,12 15,21 9,3 6,12 2,12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </span>
+                <div>
+                  <div class="qb-title">开始分析</div>
+                  <div class="qb-desc">AI 分析招标文件要点</div>
+                </div>
+              </button>
+              <button class="quick-btn" @click="setView('certs')">
+                <span class="qb-icon qb-icon--mint">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8" r="6" stroke="currentColor" stroke-width="2"/><path d="M8.56 14.3a4 4 0 1 0 6.88 0" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                </span>
+                <div>
+                  <div class="qb-title">资质检查</div>
+                  <div class="qb-desc">查看证书有效期状态</div>
+                </div>
+              </button>
+            </div>
+          </div>
+          <div class="dash-section">
+            <div class="section-header">
+              <h3>即将到期证书</h3>
+              <a @click="setView('certs')" class="section-link">查看全部</a>
+            </div>
+            <div v-if="expiringSoon.length === 0" class="empty-state"><span>暂无即将到期的证书</span></div>
+            <div v-else class="cert-list-mini">
+              <div v-for="cert in expiringSoon" :key="cert.id" class="cert-mini-item">
+                <span class="cert-type-dot"></span>
+                <div class="cert-mini-info">
+                  <div class="cert-mini-name">{{ cert.name }}</div>
+                  <div class="cert-mini-expire">到期：{{ cert.expire }}</div>
+                </div>
+                <span class="cert-status-badge" :class="getCertStatusClass(cert)">{{ getCertStatusLabel(cert) }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ▸ 文件管理 -->
+      <div v-if="activeView === 'files'" class="view-panel">
+        <div class="page-header">
+          <h1 class="page-title">文件管理</h1>
+          <p class="page-subtitle">管理招标相关文件，支持文件夹分类</p>
+        </div>
+        <div class="toolbar">
+          <div class="toolbar-left">
+            <label class="btn btn--primary" style="cursor:pointer">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><polyline points="17,8 12,3 7,8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><line x1="12" y1="3" x2="12" y2="15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+              上传文件
+              <input type="file" multiple style="display:none" @change="uploadFiles" />
+            </label>
+            <button class="btn btn--outline" @click="showNewFolder = true">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><line x1="12" y1="11" x2="12" y2="17" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><line x1="9" y1="14" x2="15" y2="14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+              新建文件夹
+            </button>
+          </div>
+          <div class="toolbar-right">
+            <span class="file-count-badge">共 {{ folders.length + files.length }} 项</span>
+          </div>
+        </div>
+
+        <!-- 面包屑导航 -->
+        <div v-if="currentFolder" class="breadcrumb">
+          <a @click="navigateToFolder('')" class="breadcrumb-item">根目录</a>
+          <span class="breadcrumb-sep">/</span>
+          <span class="breadcrumb-item breadcrumb-item--current">{{ currentFolder }}</span>
+        </div>
+
+        <!-- 空状态 -->
+        <div v-if="folders.length === 0 && files.length === 0 && !currentFolder" class="empty-state-full">
+          <div class="empty-illustration">
+            <svg width="64" height="64" viewBox="0 0 24 24" fill="none" opacity="0.3">
+              <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+            </svg>
+          </div>
+          <p>暂无文件，上传或新建文件夹开始管理</p>
+        </div>
+
+        <div v-else class="file-table-wrap">
+          <table class="file-table">
+            <thead>
+              <tr>
+                <th>名称</th>
+                <th>类型</th>
+                <th>大小</th>
+                <th>修改时间</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <!-- 文件夹 -->
+              <tr v-for="folder in folders" :key="folder.name" class="folder-row" @dblclick="enterFolder(folder.name)">
+                <td>
+                  <div class="file-name-cell">
+                    <span class="file-icon">📁</span>
+                    <a class="folder-link" @click="enterFolder(folder.name)">{{ folder.name }}</a>
+                  </div>
+                </td>
+                <td><span class="type-badge type-badge--folder">文件夹</span></td>
+                <td>—</td>
+                <td>{{ formatDate(folder.modified) }}</td>
+                <td>
+                  <button class="icon-btn icon-btn--danger" @click="deleteFolder(folder.name)" title="删除">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><polyline points="3,6 5,6 21,6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  </button>
+                </td>
+              </tr>
+              <!-- 文件 -->
+              <tr v-for="file in files" :key="file.name">
+                <td>
+                  <div class="file-name-cell">
+                    <span class="file-icon">{{ getFileEmoji(file.type) }}</span>
+                    <span>{{ file.name }}</span>
+                  </div>
+                </td>
+                <td><span class="type-badge">{{ file.type }}</span></td>
+                <td>{{ formatSize(file.size) }}</td>
+                <td>{{ formatDate(file.modified) }}</td>
+                <td>
+                  <button class="icon-btn icon-btn--danger" @click="deleteFile(file.name)" title="删除">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><polyline points="3,6 5,6 21,6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  </button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ▸ 项目管理 -->
+      <div v-if="activeView === 'analysis'" class="view-panel">
+        <div class="page-header">
+          <h1 class="page-title">项目管理</h1>
+          <p class="page-subtitle">管理招标项目，上传文件，AI 提取关键信息，识别废标风险</p>
+        </div>
+
+        <!-- 项目列表视图 -->
+        <div v-if="!currentProject" class="projects-list-view">
+          <div class="toolbar">
+            <div class="toolbar-left">
+              <button class="btn btn--primary" @click="showNewProject = true">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><line x1="12" y1="5" x2="12" y2="19" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="5" y1="12" x2="19" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                新建项目
+              </button>
+            </div>
+          </div>
+
+          <div v-if="projects.length === 0" class="empty-state-full">
+            <div class="empty-illustration">
+              <svg width="64" height="64" viewBox="0 0 24 24" fill="none" opacity="0.3">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+                <polyline points="14,2 14,8 20,8" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+              </svg>
+            </div>
+            <p>暂无项目，点击"新建项目"开始</p>
+          </div>
+
+          <div v-else class="projects-table-wrap">
+            <table class="bidding-table">
+              <thead>
+                <tr>
+                  <th style="width: 25%">项目名称</th>
+                  <th style="width: 12%">项目编号</th>
+                  <th style="width: 12%">招标人</th>
+                  <th style="width: 12%">预算金额</th>
+                  <th style="width: 12%">投标截止</th>
+                  <th style="width: 6%">风险</th>
+                  <th style="width: 7%">状态</th>
+                  <th style="width: 8%">操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="proj in projects" :key="proj.id" @click="openProject(proj.id)" class="bidding-row">
+                  <td>
+                    <div class="bidding-title">{{ proj.name }}</div>
+                  </td>
+                  <td>{{ proj.project_no || '—' }}</td>
+                  <td>{{ proj.purchaser || '—' }}</td>
+                  <td>{{ proj.budget_amount || '—' }}</td>
+                  <td>{{ proj.bid_deadline || '—' }}</td>
+                  <td>
+                    <span v-if="proj.risk_count" class="risk-badge" :class="{'risk-badge--high': proj.high_risk_count > 0}">
+                      {{ proj.risk_count }} 项
+                    </span>
+                    <span v-else>—</span>
+                  </td>
+                  <td>
+                    <span class="project-status" :class="'project-status--' + proj.status">
+                      {{ getProjectStatusLabel(proj.status) }}
+                    </span>
+                  </td>
+                  <td>
+                    <div style="display:flex;gap:6px;align-items:center;justify-content:flex-end">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" class="bidding-arrow"><path d="M9 18l6-6-6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                      <button class="icon-btn icon-btn--danger" @click.stop="deleteProject(proj.id, $event)" title="删除" style="padding:4px">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                          <polyline points="3,6 5,6 21,6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                          <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                          <path d="M10 11v6M14 11v6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                          <path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- 项目详情视图 -->
+        <div v-else class="project-detail-view">
+          <div class="project-detail-header">
+            <button class="btn btn--ghost" @click="closeProject">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              返回列表
+            </button>
+            <h2 class="project-detail-title">{{ currentProject.name }}</h2>
+            <div class="project-detail-actions">
+              <button class="btn btn--danger" @click="deleteProject(currentProject.id)" style="margin-right:auto">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                  <polyline points="3,6 5,6 21,6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                  <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                删除项目
+              </button>
+              <button class="btn btn--outline" @click="exportProjectFields" :disabled="!currentProjectFields.length">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><polyline points="7,10 12,15 17,10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><line x1="12" y1="15" x2="12" y2="3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                导出登记本
+              </button>
+              <button class="btn btn--outline" @click="exportProjectRisks" :disabled="!currentProjectRisks.length">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><polyline points="7,10 12,15 17,10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><line x1="12" y1="15" x2="12" y2="3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                导出风险清单
+              </button>
+            </div>
+          </div>
+
+          <!-- 项目详情标签页 -->
+          <div class="project-tabs">
+            <button class="project-tab" :class="{'project-tab--active': projectTab === 'files'}" @click="projectTab = 'files'">文件管理</button>
+            <button class="project-tab" :class="{'project-tab--active': projectTab === 'fields'}" @click="projectTab = 'fields'">字段复核</button>
+            <button class="project-tab" :class="{'project-tab--active': projectTab === 'risks'}" @click="projectTab = 'risks'">风险清单</button>
+          </div>
+
+          <!-- 文件管理标签 -->
+          <div v-if="projectTab === 'files'" class="project-tab-content">
+            <div class="toolbar">
+              <div class="toolbar-left">
+                <label class="btn btn--primary" style="cursor:pointer">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><polyline points="17,8 12,3 7,8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><line x1="12" y1="3" x2="12" y2="15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                  上传文件
+                  <input type="file" multiple style="display:none" @change="uploadProjectFiles" />
+                </label>
+                <button class="btn btn--outline" @click="parseAllProjectFiles" :disabled="!projectFiles.filter(f => f.parse_status !== 'done').length">
+                  解析全部文件
+                </button>
+                <button class="btn btn--primary" @click="extractProjectInfo" :disabled="!projectFiles.filter(f => f.parse_status === 'done').length || extracting">
+                  {{ extracting ? 'AI 分析中...' : 'AI 提取信息' }}
+                </button>
+              </div>
+            </div>
+
+            <div v-if="projectFiles.length === 0" class="empty-state">
+              <p>暂无文件，上传招标文件开始分析</p>
+            </div>
+            <div v-else class="file-table-wrap">
+              <table class="file-table">
+                <thead>
+                  <tr>
+                    <th>文件名</th>
+                    <th>类型</th>
+                    <th>大小</th>
+                    <th>解析状态</th>
+                    <th>上传时间</th>
+                    <th>操作</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="file in projectFiles" :key="file.id">
+                    <td>
+                      <div class="file-name-cell">
+                        <span class="file-icon">{{ getFileEmoji(file.file_type) }}</span>
+                        <span>{{ file.original_name }}</span>
+                      </div>
+                    </td>
+                    <td><span class="type-badge">{{ file.file_type }}</span></td>
+                    <td>{{ formatSize(file.file_size) }}</td>
+                    <td>
+                      <span class="parse-status" :class="'parse-status--' + file.parse_status">
+                        {{ getParseStatusLabel(file.parse_status) }}
+                      </span>
+                    </td>
+                    <td>{{ file.uploaded_at }}</td>
+                    <td>
+                      <button class="icon-btn icon-btn--primary" @click="downloadProjectFile(file)" title="下载">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><polyline points="7,10 12,15 17,10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><line x1="12" y1="15" x2="12" y2="3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                      </button>
+                      <button class="icon-btn" @click="parseProjectFile(file)" :disabled="file.parse_status === 'done'" title="解析">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><polyline points="22,12 18,12 15,21 9,3 6,12 2,12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                      </button>
+                      <button class="icon-btn icon-btn--danger" @click="deleteProjectFile(file)" title="删除">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><polyline points="3,6 5,6 21,6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                      </button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- 字段复核标签 -->
+          <div v-if="projectTab === 'fields'" class="project-tab-content">
+            <div class="field-review-stats">
+              <span>共 {{ currentProjectFields.length }} 个字段</span>
+              <span>待复核: {{ fieldReviewStats.pending }}</span>
+              <span>已确认: {{ fieldReviewStats.confirmed }}</span>
+            </div>
+            <div v-if="currentProjectFields.length === 0" class="empty-state">
+              <p>暂无字段数据，请先上传文件并执行 AI 提取</p>
+            </div>
+            <div v-else class="fields-table-wrap">
+              <table class="fields-table">
+                <thead>
+                  <tr>
+                    <th style="width: 15%">字段名称</th>
+                    <th style="width: 20%">机器提取值</th>
+                    <th style="width: 20%">人工确认值</th>
+                    <th style="width: 15%">来源文件</th>
+                    <th style="width: 10%">置信度</th>
+                    <th style="width: 10%">状态</th>
+                    <th style="width: 10%">操作</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="field in currentProjectFields" :key="field.id">
+                    <td><strong>{{ field.field_label }}</strong></td>
+                    <td>{{ field.machine_value || '—' }}</td>
+                    <td>
+                      <input v-if="editingField === field.id" class="table-input" v-model="fieldEditValue" @keyup.enter="saveFieldReview(field)" @keyup.esc="editingField = null" />
+                      <span v-else>{{ field.confirmed_value || '—' }}</span>
+                    </td>
+                    <td>{{ field.source_file_name || '—' }}</td>
+                    <td>{{ field.confidence ? (field.confidence * 100).toFixed(0) + '%' : '—' }}</td>
+                    <td>
+                      <span class="review-status" :class="'review-status--' + field.review_status">
+                        {{ getFieldReviewLabel(field.review_status) }}
+                      </span>
+                    </td>
+                    <td>
+                      <button v-if="editingField !== field.id" class="btn btn--sm btn--outline" @click="startEditField(field)">编辑</button>
+                      <template v-else>
+                        <button class="btn btn--sm btn--primary" @click="saveFieldReview(field)">保存</button>
+                        <button class="btn btn--sm btn--ghost" @click="editingField = null">取消</button>
+                      </template>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- 风险清单标签 -->
+          <div v-if="projectTab === 'risks'" class="project-tab-content">
+            <div class="field-review-stats">
+              <span>共 {{ currentProjectRisks.length }} 项风险</span>
+              <span class="risk-stat--high">高风险: {{ riskStats.high }}</span>
+              <span class="risk-stat--medium">中风险: {{ riskStats.medium }}</span>
+              <span>待复核: {{ riskReviewStats.pending }}</span>
+            </div>
+            <div v-if="currentProjectRisks.length === 0" class="empty-state">
+              <p>暂无风险项，请先上传文件并执行 AI 提取</p>
+            </div>
+            <div v-else class="risks-list">
+              <div v-for="risk in currentProjectRisks" :key="risk.id" class="risk-card">
+                <div class="risk-card-header">
+                  <span class="risk-severity" :class="'risk-severity--' + risk.severity">
+                    {{ getRiskSeverityLabel(risk.severity) }}
+                  </span>
+                  <span class="risk-category">{{ risk.category }}</span>
+                  <span class="review-status" :class="'review-status--' + risk.review_status">
+                    {{ getRiskReviewLabel(risk.review_status) }}
+                  </span>
+                </div>
+                <div class="risk-card-title">{{ risk.title }}</div>
+                <div class="risk-card-content">
+                  <div class="risk-original-text">{{ risk.original_text }}</div>
+                  <div class="risk-trigger" v-if="risk.trigger_reason">
+                    <strong>触发原因：</strong>{{ risk.trigger_reason }}
+                  </div>
+                </div>
+                <div class="risk-card-footer">
+                  <span class="risk-source">来源：{{ risk.source_file_name || '未知' }}</span>
+                  <div class="risk-actions">
+                    <button class="btn btn--sm btn--primary" @click="confirmRisk(risk)" v-if="risk.review_status === 'pending'">确认</button>
+                    <button class="btn btn--sm btn--ghost" @click="ignoreRisk(risk)" v-if="risk.review_status === 'pending'">忽略</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ▸ 资质管理 -->
+      <div v-if="activeView === 'certs'" class="view-panel certs-view">
+        <div class="page-header">
+          <h1 class="page-title">资质管理</h1>
+          <p class="page-subtitle">统一管理企业资质证书，追踪有效期，支持分类与文件下载</p>
+        </div>
+
+        <div class="certs-layout">
+          <!-- 左侧：分类目录树 -->
+          <aside class="certs-sidebar">
+            <div class="certs-sidebar-header">
+              <span>证书分类</span>
+              <button class="icon-btn icon-btn--sm" @click="showAddCertCat = true" title="添加分类">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><line x1="12" y1="5" x2="12" y2="19" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="5" y1="12" x2="19" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+              </button>
+            </div>
+            <ul class="certs-cat-list">
+              <li class="certs-cat-item" :class="{ 'certs-cat-item--active': certCatFilter === '' }"
+                @click="certCatFilter = ''">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+                <span class="certs-cat-name">全部证书</span>
+                <span class="certs-cat-count">{{ certs.length }}</span>
+              </li>
+              <li v-for="cat in certCategories" :key="cat.name" class="certs-cat-item"
+                :class="{ 'certs-cat-item--active': certCatFilter === cat.name }"
+                @click="certCatFilter = cat.name">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+                <span class="certs-cat-name">{{ cat.name }}</span>
+                <span class="certs-cat-count">{{ cat.count }}</span>
+                <div class="certs-cat-actions">
+                  <button class="icon-btn icon-btn--tiny" @click.stop="startRenameCat(cat)" title="重命名">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+                  </button>
+                  <button class="icon-btn icon-btn--tiny icon-btn--danger" @click.stop="deleteCertCat(cat)" title="删除">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none"><line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                  </button>
+                </div>
+              </li>
+            </ul>
+
+            <!-- 添加分类弹窗 -->
+            <Transition name="fade">
+              <div v-if="showAddCertCat" class="modal-overlay" @click.self="showAddCertCat = false">
+                <div class="modal modal--sm">
+                  <div class="modal-header"><h3>添加分类</h3><button class="modal-close" @click="showAddCertCat = false"><svg width="16" height="16" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" stroke-width="2"/><line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" stroke-width="2"/></svg></button></div>
+                  <div class="modal-body">
+                    <div class="form-group"><label class="form-label">分类名称</label><input type="text" class="form-input" v-model="newCertCatName" placeholder="例：施工资质、管理体系" @keyup.enter="addCertCategory"/></div>
+                  </div>
+                  <div class="modal-footer">
+                    <button class="btn btn--ghost" @click="showAddCertCat = false">取消</button>
+                    <button class="btn btn--primary" @click="addCertCategory" :disabled="!newCertCatName.trim()">确认</button>
+                  </div>
+                </div>
+              </div>
+            </Transition>
+
+            <!-- 重命名分类弹窗 -->
+            <Transition name="fade">
+              <div v-if="renameCertCatTarget" class="modal-overlay" @click.self="renameCertCatTarget = null">
+                <div class="modal modal--sm">
+                  <div class="modal-header"><h3>重命名分类</h3><button class="modal-close" @click="renameCertCatTarget = null"><svg width="16" height="16" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" stroke-width="2"/><line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" stroke-width="2"/></svg></button></div>
+                  <div class="modal-body">
+                    <div class="form-group"><label class="form-label">新名称</label><input type="text" class="form-input" v-model="renameCertCatName" @keyup.enter="doRenameCat"/></div>
+                  </div>
+                  <div class="modal-footer">
+                    <button class="btn btn--ghost" @click="renameCertCatTarget = null">取消</button>
+                    <button class="btn btn--primary" @click="doRenameCat" :disabled="!renameCertCatName.trim()">确认</button>
+                  </div>
+                </div>
+              </div>
+            </Transition>
+          </aside>
+
+          <!-- 右侧：证书列表 -->
+          <main class="certs-content">
+            <div class="certs-toolbar">
+              <button class="btn btn--primary" @click="showAddCert = true">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><line x1="12" y1="5" x2="12" y2="19" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="5" y1="12" x2="19" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                添加证书
+              </button>
+              <div class="cert-filter-tabs">
+                <button class="filter-tab" :class="{active: certFilter === 'all'}" @click="certFilter = 'all'">全部</button>
+                <button class="filter-tab" :class="{active: certFilter === 'valid'}" @click="certFilter = 'valid'">有效</button>
+                <button class="filter-tab" :class="{active: certFilter === 'expired'}" @click="certFilter = 'expired'">已过期</button>
+              </div>
+            </div>
+
+            <!-- 空状态 -->
+            <div v-if="filteredCerts.length === 0" class="empty-state">
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" opacity="0.25">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+                <polyline points="14,2 14,8 20,8" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+              </svg>
+              <p class="empty-text">{{ certCatFilter ? '该分类下暂无证书' : '暂无证书，点击上方按钮添加' }}</p>
+            </div>
+
+            <!-- 证书网格 -->
+            <div v-else class="cert-grid">
+              <div v-for="cert in filteredCerts" :key="cert.id" class="cert-card">
+                <div class="cert-card-header">
+                  <span class="cert-type-tag">{{ cert.type || cert.category }}</span>
+                  <span class="cert-status-badge" :class="getCertStatusClass(cert)">{{ getCertStatusLabel(cert) }}</span>
+                </div>
+                <div class="cert-card-body">
+                  <div class="cert-file-icon">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><polyline points="14,2 14,8 20,8" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+                  </div>
+                  <div class="cert-card-info">
+                    <div class="cert-name">{{ cert.name }}</div>
+                    <div class="cert-meta">
+                      <span><svg width="11" height="11" viewBox="0 0 24 24" fill="none"><rect x="3" y="4" width="18" height="18" rx="2" stroke="currentColor" stroke-width="2"/><line x1="16" y1="2" x2="16" y2="6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="8" y1="2" x2="8" y2="6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="3" y1="10" x2="21" y2="10" stroke="currentColor" stroke-width="2"/></svg> {{ cert.expire || '—' }}</span>
+                      <span><svg width="11" height="11" viewBox="0 0 24 24" fill="none"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg> {{ cert.issuer || '—' }}</span>
+                    </div>
+                  </div>
+                </div>
+                <div class="cert-card-footer">
+                  <span class="cert-file-hint" v-if="cert.file_name">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    {{ cert.file_name }}
+                  </span>
+                  <div class="cert-card-actions">
+                    <button v-if="cert.file_path" class="icon-btn icon-btn--primary" @click="downloadCertFile(cert)" title="下载文件">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><polyline points="7,10 12,15 17,10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><line x1="12" y1="15" x2="12" y2="3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                    </button>
+                    <button class="icon-btn icon-btn--danger" @click="deleteCert(cert.id)" title="删除">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><polyline points="3,6 5,6 21,6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </main>
+        </div>
+      </div>
+
+      <!-- ▸ 区域查询 -->
+      <div v-if="activeView === 'region'" class="view-panel region-view">
+        <div class="page-header">
+          <h1 class="page-title">区域查询</h1>
+          <p class="page-subtitle">按省份和城市筛选招标信息，快速掌握各地招标动态</p>
+        </div>
+
+        <!-- 统计卡片 -->
+        <div class="region-stats-row">
+          <div class="region-stat-card">
+            <div class="region-stat-num">{{ biddingStats.total }}</div>
+            <div class="region-stat-label">招标项目总数</div>
+          </div>
+          <div class="region-stat-card region-stat-card--active">
+            <div class="region-stat-num">{{ biddingStats.bidding || 0 }}</div>
+            <div class="region-stat-label">正在招标</div>
+          </div>
+          <div class="region-stat-card region-stat-card--warn">
+            <div class="region-stat-num">{{ biddingStats.expiring_soon }}</div>
+            <div class="region-stat-label">7天内截止</div>
+          </div>
+          <div class="region-stat-card">
+            <div class="region-stat-num">{{ biddingStats.awarded || 0 }}</div>
+            <div class="region-stat-label">已中标</div>
+          </div>
+        </div>
+
+        <!-- 搜索 + 筛选栏 -->
+        <div class="region-toolbar">
+          <div class="region-search">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="8" stroke="currentColor" stroke-width="2"/><line x1="21" y1="21" x2="16.65" y2="16.65" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            <input type="text" class="region-search-input" v-model="bidSearchKeyword" placeholder="搜索招标项目名称、代理机构或城市..."
+              @keyup.enter="searchBidding" />
+          </div>
+          <select class="form-select form-select--sm" v-model="bidProvinceFilter" @change="onBidProvinceChange">
+            <option value="">全部省份</option>
+            <option v-for="r in regions" :key="r.province" :value="r.province">{{ r.province }}</option>
+          </select>
+          <select class="form-select form-select--sm" v-model="bidCityFilter" :disabled="!bidProvinceFilter">
+            <option value="">全部城市</option>
+            <option v-for="c in bidFilterCities" :key="c" :value="c">{{ c }}</option>
+          </select>
+          <select class="form-select form-select--sm" v-model="bidCategoryFilter">
+            <option value="">全部类别</option>
+            <option v-for="c in bidCategories" :key="c" :value="c">{{ c }}</option>
+          </select>
+          <select class="form-select form-select--sm" v-model="bidStatusFilter">
+            <option value="">全部状态</option>
+            <option value="招标中">招标中</option>
+            <option value="已截止">已截止</option>
+            <option value="已中标">已中标</option>
+          </select>
+          <button class="btn btn--primary btn--sm" @click="refreshBidding" :disabled="biddingRefreshing">
+            {{ biddingRefreshing ? '刷新中...' : '刷新数据' }}
+          </button>
+        </div>
+
+        <!-- 招标列表 -->
+        <div class="bidding-table-wrap">
+          <table class="bidding-table" v-if="biddingList.length > 0">
+            <thead>
+              <tr>
+                <th style="width: 36%">项目名称</th>
+                <th style="width: 10%">省份</th>
+                <th style="width: 8%">城市</th>
+                <th style="width: 10%">类别</th>
+                <th style="width: 12%">预算范围</th>
+                <th style="width: 10%">截止日期</th>
+                <th style="width: 8%">状态</th>
+                <th style="width: 6%"></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="item in biddingList" :key="item.id" @click="showBidDetail(item)" class="bidding-row">
+                <td>
+                  <div class="bidding-title">{{ item.title }}</div>
+                  <div class="bidding-agency">{{ item.agency }}</div>
+                </td>
+                <td><span class="bidding-tag bidding-tag--province">{{ item.region_province }}</span></td>
+                <td>{{ item.region_city }}</td>
+                <td><span class="bidding-tag bidding-tag--cat">{{ item.category }}</span></td>
+                <td class="bidding-budget">{{ item.budget_min }} - {{ item.budget_max }} {{ item.budget_unit }}</td>
+                <td>
+                  <span :class="{'bidding-deadline--soon': isBidExpiringSoon(item)}">{{ item.deadline }}</span>
+                </td>
+                <td>
+                  <span class="bidding-status" :class="'bidding-status--' + getBidStatusClass(item)">{{ item.status }}</span>
+                </td>
+                <td>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" class="bidding-arrow"><path d="M9 18l6-6-6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <div v-else class="empty-state">
+            <p>暂无匹配的招标信息</p>
+            <p style="font-size:12px;color:var(--gray-300);margin-top:4px">尝试调整筛选条件或点击"刷新数据"</p>
+          </div>
+        </div>
+
+        <!-- 分页 -->
+        <div class="bidding-pagination" v-if="biddingTotal > biddingPerPage">
+          <button class="btn--page" :disabled="biddingPage <= 1" @click="goBidPage(biddingPage - 1)">上一页</button>
+          <span class="bidding-page-info">第 {{ biddingPage }} / {{ biddingTotalPages }} 页，共 {{ biddingTotal }} 条</span>
+          <button class="btn--page" :disabled="biddingPage >= biddingTotalPages" @click="goBidPage(biddingPage + 1)">下一页</button>
+        </div>
+
+        <!-- 详情弹窗 -->
+        <div class="modal-overlay" v-if="bidDetailVisible" @click.self="bidDetailVisible = false">
+          <div class="modal modal--bid-detail">
+            <div class="modal-header">
+              <h3>招标详情</h3>
+              <button class="modal-close" @click="bidDetailVisible = false">&times;</button>
+            </div>
+            <div class="modal-body" v-if="bidDetail">
+              <div class="bid-detail-header">
+                <h2 class="bid-detail-title">{{ bidDetail.title }}</h2>
+                <span class="bidding-status bidding-status--big" :class="'bidding-status--' + getBidStatusClass(bidDetail)">{{ bidDetail.status }}</span>
+              </div>
+              <div class="bid-detail-grid">
+                <div class="bid-detail-item">
+                  <span class="bid-detail-label">所在地区</span>
+                  <span class="bid-detail-value">{{ bidDetail.region_province }} · {{ bidDetail.region_city }}</span>
+                </div>
+                <div class="bid-detail-item">
+                  <span class="bid-detail-label">项目类别</span>
+                  <span class="bid-detail-value">{{ bidDetail.category }}</span>
+                </div>
+                <div class="bid-detail-item">
+                  <span class="bid-detail-label">代理机构</span>
+                  <span class="bid-detail-value">{{ bidDetail.agency }}</span>
+                </div>
+                <div class="bid-detail-item">
+                  <span class="bid-detail-label">发布日期</span>
+                  <span class="bid-detail-value">{{ bidDetail.publish_date }}</span>
+                </div>
+                <div class="bid-detail-item">
+                  <span class="bid-detail-label">截止日期</span>
+                  <span class="bid-detail-value" :class="{'bidding-deadline--soon': isBidExpiringSoon(bidDetail)}">{{ bidDetail.deadline }}</span>
+                </div>
+                <div class="bid-detail-item">
+                  <span class="bid-detail-label">预算范围</span>
+                  <span class="bid-detail-value bid-detail-budget">{{ bidDetail.budget_min }} - {{ bidDetail.budget_max }} {{ bidDetail.budget_unit }}</span>
+                </div>
+                <div class="bid-detail-item">
+                  <span class="bid-detail-label">联系人</span>
+                  <span class="bid-detail-value">{{ bidDetail.contact }}</span>
+                </div>
+                <div class="bid-detail-item">
+                  <span class="bid-detail-label">联系电话</span>
+                  <span class="bid-detail-value">{{ bidDetail.phone }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ▸ 报价调整 -->
+      <div v-if="activeView === 'pricing'" class="view-panel pricing-view">
+        <div class="page-header">
+          <h1 class="page-title">报价调整</h1>
+          <p class="page-subtitle">管理成本项、调整利润率与策略，自动生成投标报价</p>
+        </div>
+
+        <div class="pricing-layout">
+          <!-- 左侧：项目列表 -->
+          <div class="pricing-sidebar">
+            <div class="pricing-sidebar-header">
+              <span>报价项目</span>
+              <button class="btn-icon" @click="startNewPricing" title="新建报价">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><line x1="12" y1="5" x2="12" y2="19" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/><line x1="5" y1="12" x2="19" y2="12" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg>
+              </button>
+            </div>
+            <ul class="pricing-proj-list" v-if="pricingProjects.length > 0">
+              <li v-for="proj in pricingProjects" :key="proj.id"
+                  :class="{'pricing-proj-item--active': currentPricingId === proj.id}"
+                  class="pricing-proj-item"
+                  @click="selectPricingProject(proj.id)">
+                <div class="pricing-proj-name">{{ proj.name }}</div>
+                <div class="pricing-proj-meta">
+                  <span>¥{{ formatPricingNum(proj.summary.total) }}</span>
+                  <span>{{ proj.item_count }} 项</span>
+                </div>
+                <button class="pricing-proj-del" @click.stop="deletePricingProject(proj.id)" title="删除">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                </button>
+              </li>
+            </ul>
+            <div v-else class="pricing-sidebar-empty">暂无报价项目</div>
+          </div>
+
+          <!-- 右侧：报价详情编辑 -->
+          <div class="pricing-content" v-if="currentPricing">
+            <!-- 项目基本信息 -->
+            <div class="pricing-header-card">
+              <div class="pricing-header-left">
+                <input class="pricing-name-input" v-model="pricingForm.name" @change="savePricingMeta" placeholder="报价项目名称" />
+                <input class="pricing-desc-input" v-model="pricingForm.description" @change="savePricingMeta" placeholder="项目描述（选填）" />
+              </div>
+              <div class="pricing-header-right">
+                <div class="pricing-strategy-selector">
+                  <span class="pricing-label">报价策略</span>
+                  <div class="strategy-options">
+                    <label v-for="s in pricingStrategies" :key="s.id"
+                           :class="['strategy-opt', 'strategy-opt--' + s.color, { 'strategy-opt--active': pricingForm.strategy === s.id }]"
+                           @change="savePricingMeta">
+                      <input type="radio" v-model="pricingForm.strategy" :value="s.id" hidden />
+                      {{ s.name }}
+                    </label>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 成本项表格 -->
+            <div class="pricing-section">
+              <div class="pricing-section-header">
+                <h3>成本明细</h3>
+                <button class="btn btn--primary btn--sm" @click="openAddItem">+ 添加成本项</button>
+              </div>
+              <div class="pricing-table-wrap">
+                <table class="pricing-table" v-if="currentPricing.items && currentPricing.items.length > 0">
+                  <thead>
+                    <tr>
+                      <th style="width:4%">#</th>
+                      <th style="width:24%">名称</th>
+                      <th style="width:10%">类别</th>
+                      <th style="width:12%">单价 (¥)</th>
+                      <th style="width:8%">数量</th>
+                      <th style="width:6%">单位</th>
+                      <th style="width:12%">小计 (¥)</th>
+                      <th style="width:18%">备注</th>
+                      <th style="width:6%"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="(item, idx) in currentPricing.items" :key="item.id">
+                      <td class="td-num">{{ idx + 1 }}</td>
+                      <td>
+                        <input class="table-input" v-model="item.name" @change="saveItem(item)" />
+                      </td>
+                      <td>
+                        <select class="table-select" v-model="item.category" @change="saveItem(item)">
+                          <option v-for="c in pricingCategories" :key="c.id" :value="c.id">{{ c.name }}</option>
+                        </select>
+                      </td>
+                      <td>
+                        <input class="table-input table-input--num" type="number" v-model.number="item.unit_price" @change="saveItem(item)" min="0" step="0.01" />
+                      </td>
+                      <td>
+                        <input class="table-input table-input--num" type="number" v-model.number="item.quantity" @change="saveItem(item)" min="0.01" step="1" />
+                      </td>
+                      <td>
+                        <input class="table-input table-input--sm" v-model="item.unit" @change="saveItem(item)" placeholder="项" />
+                      </td>
+                      <td class="td-price">¥{{ formatPricingNum(item.unit_price * item.quantity) }}</td>
+                      <td>
+                        <input class="table-input" v-model="item.note" @change="saveItem(item)" placeholder="备注" />
+                      </td>
+                      <td>
+                        <button class="btn-icon btn-icon--danger" @click="deleteItem(item.id)" title="删除">
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                        </button>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+                <div v-else class="empty-state">暂无成本项，点击上方按钮添加</div>
+              </div>
+            </div>
+
+            <!-- 费率调整 + 汇总 -->
+            <div class="pricing-summary-row">
+              <div class="pricing-adjust">
+                <h4>费率调整</h4>
+                <div class="adjust-grid">
+                  <div class="adjust-item">
+                    <label>利润率 (%)</label>
+                    <div class="adjust-input-wrap">
+                      <input type="range" v-model.number="pricingForm.profit_rate" min="0" max="50" @input="savePricingMetaDebounced" />
+                      <input type="number" v-model.number="pricingForm.profit_rate" min="0" max="50" step="0.5" @change="savePricingMeta" class="adjust-num" />
+                      <span>%</span>
+                    </div>
+                  </div>
+                  <div class="adjust-item">
+                    <label>折扣率 (%)</label>
+                    <div class="adjust-input-wrap">
+                      <input type="range" v-model.number="pricingForm.discount" min="0" max="30" @input="savePricingMetaDebounced" />
+                      <input type="number" v-model.number="pricingForm.discount" min="0" max="30" step="0.5" @change="savePricingMeta" class="adjust-num" />
+                      <span>%</span>
+                    </div>
+                  </div>
+                  <div class="adjust-item">
+                    <label>税率 (%)</label>
+                    <div class="adjust-input-wrap">
+                      <input type="range" v-model.number="pricingForm.tax_rate" min="0" max="17" @input="savePricingMetaDebounced" />
+                      <input type="number" v-model.number="pricingForm.tax_rate" min="0" max="17" step="0.5" @change="savePricingMeta" class="adjust-num" />
+                      <span>%</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="pricing-total-card">
+                <h4>报价汇总</h4>
+                <div class="total-lines">
+                  <div class="total-line">
+                    <span>成本合计</span>
+                    <span class="total-val">¥{{ formatPricingNum(currentPricing.summary?.subtotal || 0) }}</span>
+                  </div>
+                  <div class="total-line">
+                    <span>利润 ({{ pricingForm.profit_rate }}%)</span>
+                    <span class="total-val total-val--profit">+ ¥{{ formatPricingNum(currentPricing.summary?.profit || 0) }}</span>
+                  </div>
+                  <div class="total-line" v-if="pricingForm.discount > 0">
+                    <span>折扣 ({{ pricingForm.discount }}%)</span>
+                    <span class="total-val total-val--discount">- ¥{{ formatPricingNum((currentPricing.summary?.subtotal + currentPricing.summary?.profit || 0) * pricingForm.discount / 100) }}</span>
+                  </div>
+                  <div class="total-line">
+                    <span>税费 ({{ pricingForm.tax_rate }}%)</span>
+                    <span class="total-val">+ ¥{{ formatPricingNum(currentPricing.summary?.tax || 0) }}</span>
+                  </div>
+                  <div class="total-line total-line--final">
+                    <span>最终报价</span>
+                    <span class="total-val total-val--final">¥{{ formatPricingNum(currentPricing.summary?.total || 0) }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 未选中项目时的空状态 -->
+          <div v-else class="pricing-empty-main">
+            <div class="empty-state-full">
+              <div class="empty-illustration">
+                <svg width="56" height="56" viewBox="0 0 24 24" fill="none" opacity="0.3">
+                  <line x1="12" y1="1" x2="12" y2="23" stroke="currentColor" stroke-width="1.2"/>
+                  <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </div>
+              <p>选择一个报价项目开始编辑，或新建报价</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- 新建报价弹窗 -->
+        <div class="modal-overlay" v-if="showNewPricing" @click.self="showNewPricing = false">
+          <div class="modal modal--sm">
+            <div class="modal-header">
+              <h3>新建报价项目</h3>
+              <button class="modal-close" @click="showNewPricing = false">&times;</button>
+            </div>
+            <div class="modal-body">
+              <div class="form-group">
+                <label class="form-label">项目名称</label>
+                <input class="form-input" v-model="newPricingName" placeholder="例如：XX项目投标报价" @keyup.enter="createPricingProject" />
+              </div>
+              <div class="form-group">
+                <label class="form-label">描述（选填）</label>
+                <input class="form-input" v-model="newPricingDesc" placeholder="简要描述项目背景" />
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button class="btn btn--outline" @click="showNewPricing = false">取消</button>
+              <button class="btn btn--primary" @click="createPricingProject" :disabled="!newPricingName.trim()">创建</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 添加成本项弹窗 -->
+        <div class="modal-overlay" v-if="showAddPricingItem" @click.self="showAddPricingItem = false">
+          <div class="modal">
+            <div class="modal-header">
+              <h3>添加成本项</h3>
+              <button class="modal-close" @click="showAddPricingItem = false">&times;</button>
+            </div>
+            <div class="modal-body">
+              <div class="form-group">
+                <label class="form-label">名称</label>
+                <input class="form-input" v-model="newItem.name" placeholder="例如：高级工程师" />
+              </div>
+              <div class="form-row">
+                <div class="form-group" style="flex:1">
+                  <label class="form-label">类别</label>
+                  <select class="form-input" v-model="newItem.category">
+                    <option v-for="c in pricingCategories" :key="c.id" :value="c.id">{{ c.name }}</option>
+                  </select>
+                </div>
+                <div class="form-group" style="flex:1">
+                  <label class="form-label">单位</label>
+                  <input class="form-input" v-model="newItem.unit" placeholder="人/月、台、套" />
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="form-group" style="flex:1">
+                  <label class="form-label">单价 (¥)</label>
+                  <input class="form-input" type="number" v-model.number="newItem.unit_price" min="0" step="0.01" />
+                </div>
+                <div class="form-group" style="flex:1">
+                  <label class="form-label">数量</label>
+                  <input class="form-input" type="number" v-model.number="newItem.quantity" min="0.01" step="1" />
+                </div>
+              </div>
+              <div class="form-group">
+                <label class="form-label">备注</label>
+                <input class="form-input" v-model="newItem.note" placeholder="备注说明（选填）" />
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button class="btn btn--outline" @click="showAddPricingItem = false">取消</button>
+              <button class="btn btn--primary" @click="addPricingItem" :disabled="!newItem.name.trim()">添加</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+
+      <!-- ▸ 设置 -->
+      <div v-if="activeView === 'settings'" class="view-panel">
+        <div class="page-header">
+          <h1 class="page-title">设置</h1>
+          <p class="page-subtitle">配置 AI 大模型接入参数，支持多种模型自由切换</p>
+        </div>
+
+        <div class="settings-grid">
+          <div v-for="model in modelConfigs" :key="model.id" class="model-card"
+            :class="{
+              'model-card--active': model.enabled,
+              'model-card--custom': model.id === 'custom'
+            }">
+            <div class="model-card-header">
+              <div class="model-identity">
+                <div class="model-avatar" :class="'avatar--' + model.id">
+                  {{ model.name.charAt(0) }}
+                </div>
+                <div>
+                  <div class="model-name">{{ model.name }}</div>
+                  <div class="model-model">{{ model.model || '待配置' }}</div>
+                </div>
+              </div>
+              <label class="toggle">
+                <input type="checkbox" v-model="model.enabled" />
+                <span class="toggle-track"></span>
+              </label>
+            </div>
+            <div class="model-form">
+              <div class="form-group">
+                <label class="form-label">API Key</label>
+                <div class="input-with-toggle">
+                  <input
+                    :type="showKey[model.id] ? 'text' : 'password'"
+                    class="form-input"
+                    v-model="model.api_key"
+                    :placeholder="model.api_key_masked || '请输入 API Key'"
+                  />
+                  <button class="eye-btn" @click="toggleKeyVisibility(model.id)">
+                    <svg v-if="!showKey[model.id]" width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/></svg>
+                    <svg v-else width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="1" y1="1" x2="23" y2="23" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                  </button>
+                </div>
+              </div>
+              <div class="form-group">
+                <label class="form-label">API Base URL</label>
+                <input type="text" class="form-input" v-model="model.base_url" :placeholder="model.id === 'custom' ? '请输入 API 地址' : ''" />
+              </div>
+              <div class="form-group">
+                <label class="form-label">模型名称</label>
+                <input type="text" class="form-input" v-model="model.model" :placeholder="model.id === 'custom' ? '请输入模型名称' : ''" />
+              </div>
+              <!-- 视觉支持开关 + 测试连接 -->
+              <div class="model-form-row">
+                <label class="model-vision-toggle">
+                  <span class="model-vision-label">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/></svg>
+                    视觉识别
+                  </span>
+                  <label class="toggle toggle--sm">
+                    <input type="checkbox" v-model="model.supports_vision" />
+                    <span class="toggle-track"></span>
+                  </label>
+                </label>
+                <button class="btn btn--test"
+                  @click="testModel(model)"
+                  :disabled="testingModel === model.id || !model.enabled || !model.api_key">
+                  <svg v-if="testingModel === model.id" class="spinner" width="12" height="12" viewBox="0 0 24 24" fill="none">
+                    <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" opacity="0.25"/>
+                    <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+                  </svg>
+                  <svg v-else width="12" height="12" viewBox="0 0 24 24" fill="none"><polyline points="22,12 18,12 15,21 9,3 6,12 2,12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  {{ testingModel === model.id ? '测试中…' : '测试连接' }}
+                </button>
+              </div>
+              <!-- 测试结果 -->
+              <div v-if="testResults[model.id]" class="test-result" :class="{ 'test-result--ok': testResults[model.id].ok, 'test-result--fail': !testResults[model.id].ok }">
+                <svg v-if="testResults[model.id].ok" width="14" height="14" viewBox="0 0 24 24" fill="none"><polyline points="20,6 9,17 4,12" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                <svg v-else width="14" height="14" viewBox="0 0 24 24" fill="none"><line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/><line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg>
+                <span>{{ testResults[model.id].msg }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-footer">
+          <div class="active-model-select">
+            <label class="form-label">默认使用模型</label>
+            <select class="form-select" v-model="activeModel">
+              <option value="">— 请选择 —</option>
+              <option v-for="m in modelConfigs.filter(m => m.enabled)" :key="m.id" :value="m.id">
+                {{ m.name }}
+              </option>
+            </select>
+          </div>
+          <button class="btn btn--primary btn--lg" @click="saveSettings" :disabled="saving">
+            <svg v-if="!saving" width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><polyline points="17,21 17,13 7,13 7,21" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><polyline points="7,3 7,8 15,8" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+            {{ saving ? '保存中…' : '保存配置' }}
+          </button>
+        </div>
+
+        <!-- 保存成功提示 -->
+        <Transition name="toast-fade">
+          <div v-if="toastVisible" class="toast">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><polyline points="20,6 9,17 4,12" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            配置已保存
+          </div>
+        </Transition>
+      </div>
+
+    </main>
+  </div>
+
+  <!-- 新建文件夹弹窗（置于 #app 顶层，确保遮罩覆盖全局） -->
+  <Transition name="fade">
+    <div v-if="showNewFolder" class="modal-overlay" @click.self="showNewFolder = false">
+      <div class="modal folder-modal">
+        <div class="modal-header folder-modal-header">
+          <div class="folder-modal-title">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+              <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+              <line x1="12" y1="11" x2="12" y2="17" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+              <line x1="9" y1="14" x2="15" y2="14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+            </svg>
+            <h3>新建文件夹</h3>
+          </div>
+          <button class="modal-close" @click="showNewFolder = false">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          </button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label class="form-label">文件夹名称</label>
+            <input
+              type="text"
+              class="form-input form-input--lg"
+              v-model="newFolderName"
+              placeholder="例：2024年项目"
+              @keyup.enter="createFolder"
+              autofocus
+            />
+          </div>
+          <p class="form-hint">当前路径：{{ currentFolder ? currentFolder : '根目录' }}</p>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn--ghost" @click="showNewFolder = false">取消</button>
+          <button class="btn btn--primary" @click="createFolder" :disabled="!newFolderName.trim() || creating">
+            <svg v-if="creating" class="spinner" width="14" height="14" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" opacity="0.25"/><path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>
+            <svg v-else width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            {{ creating ? '创建中...' : '创建' }}
+          </button>
+        </div>
+      </div>
+    </div>
+  </Transition>
+
+  <!-- 新建项目弹窗 -->
+  <Transition name="fade">
+    <div v-if="showNewProject" class="modal-overlay" @click.self="cancelNewProject">
+      <div class="modal" style="width:560px">
+        <div class="modal-header">
+          <h3>新建招标项目</h3>
+          <button class="modal-close" @click="cancelNewProject">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          </button>
+        </div>
+        <div class="modal-body">
+          <!-- 公告网页链接 -->
+          <div class="form-group">
+            <label class="form-label">公告网页链接 <span style="color:#e5484d">*</span></label>
+            <div style="display:flex;gap:8px">
+              <input type="url" class="form-input form-input--lg" v-model="newProject.announcement_url" placeholder="输入公告网页链接，如：https://..." style="flex:1" />
+              <button class="btn btn--primary" @click="fetchAnnouncementUrl" :disabled="!newProject.announcement_url || newProject.fetchingUrl">
+                <svg v-if="newProject.fetchingUrl" class="spinner" width="14" height="14" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2" stroke-dasharray="31.4 31.4" stroke-linecap="round"/></svg>
+                <span v-else>抓取</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- 项目名称（自动提取） -->
+          <div class="form-group">
+            <label class="form-label">项目名称</label>
+            <input type="text" class="form-input" v-model="newProject.name" placeholder="抓取公告后自动填充，也可手动修改" />
+          </div>
+
+          <!-- 上传招标文件 -->
+          <div class="form-group">
+            <label class="form-label">上传招标文件 <span style="color:#e5484d">*</span></label>
+            <div class="new-project-upload-zone"
+              :class="{ 'new-project-upload-zone--active': newProjectUploadDragover }"
+              @click="$refs.newProjectFilesInput.click()"
+              @dragover.prevent="newProjectUploadDragover = true"
+              @dragleave.prevent="newProjectUploadDragover = false"
+              @drop.prevent="handleNewProjectFileDrop">
+              <input type="file" ref="newProjectFilesInput" multiple accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.zip,.rar" @change="handleNewProjectFileSelect" style="display:none" />
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" style="color:var(--gray-400);margin-bottom:8px">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline points="17,8 12,3 7,8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                <line x1="12" y1="3" x2="12" y2="15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+              </svg>
+              <p style="font-size:13px;color:var(--gray-500);margin:0">点击或拖拽上传招标文件</p>
+              <p style="font-size:11px;color:var(--gray-400);margin:4px 0 0">支持 PDF、DOCX、图片、ZIP/RAR 格式</p>
+            </div>
+            <!-- 已选文件列表 -->
+            <div v-if="newProjectFiles.length" class="new-project-files-list">
+              <div v-for="(file, idx) in newProjectFiles" :key="idx" class="new-project-file-item">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style="color:var(--mac-purple)">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                  <polyline points="14,2 14,8 20,8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                <span class="new-project-file-name">{{ file.name }}</span>
+                <span class="new-project-file-size">{{ formatFileSize(file.size) }}</span>
+                <button class="icon-btn icon-btn--danger" @click="removeNewProjectFile(idx)" title="移除">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- 提示信息 -->
+          <div style="background:var(--mac-sky-light);border-radius:var(--radius-md);padding:var(--sp-3);margin-top:var(--sp-2)">
+            <p style="font-size:12px;color:oklch(50% 0.15 230);margin:0;display:flex;align-items:flex-start;gap:6px">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style="flex-shrink:0;margin-top:2px">
+                <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="1.8"/>
+                <line x1="12" y1="16" x2="12" y2="12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                <circle cx="12" cy="8" r="1" fill="currentColor"/>
+              </svg>
+              系统将自动从公告和招标文件中提取项目编号、预算金额、招标人、代理机构等信息，请在分析完成后进行复核确认。
+            </p>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn--ghost" @click="cancelNewProject">取消</button>
+          <button class="btn btn--primary" @click="createProjectAndAnalyze" :disabled="!newProject.announcement_url || newProjectFiles.length === 0 || newProject.creating">
+            <svg v-if="newProject.creating" class="spinner" width="14" height="14" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2" stroke-dasharray="31.4 31.4" stroke-linecap="round"/></svg>
+            <span v-else>创建并分析</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </Transition>
+
+  <!-- 添加证书弹窗（置于 #app 顶层，确保遮罩覆盖全局） -->
+  <Transition name="fade">
+    <div v-if="showAddCert" class="modal-overlay" @click.self="closeAddCert">
+      <div class="modal folder-modal" style="width:500px">
+        <div class="modal-header folder-modal-header">
+          <div class="folder-modal-title">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+              <circle cx="12" cy="8" r="6" stroke="currentColor" stroke-width="1.8"/>
+              <path d="M8.56 14.3a4 4 0 1 0 6.88 0" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+            </svg>
+            <h3>添加证书</h3>
+          </div>
+          <button class="modal-close" @click="closeAddCert">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          </button>
+        </div>
+        <div class="modal-body">
+          <!-- 文件上传识别区域 -->
+          <div class="cert-upload-zone"
+            :class="{ 'cert-upload-zone--active': certUploadDragover, 'cert-upload-zone--done': certOcrDone }"
+            @dragover.prevent="certUploadDragover = true"
+            @dragleave.prevent="certUploadDragover = false"
+            @drop.prevent="handleCertFileDrop"
+            @click="triggerCertFileInput">
+
+            <input type="file" ref="certFileInput" accept=".jpg,.jpeg,.png,.bmp,.webp,.pdf" style="display:none"
+              @change="handleCertFileChange" />
+
+            <!-- 默认状态：提示上传 -->
+            <div v-if="!certUploading && !certOcrDone" class="upload-prompt">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                <polyline points="17,8 12,3 7,8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <line x1="12" y1="3" x2="12" y2="15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              </svg>
+              <div class="upload-prompt-title">上传证书图片或 PDF</div>
+              <div class="upload-prompt-desc">AI 自动识别并填充证书信息（支持 jpg / png / pdf）</div>
+            </div>
+
+            <!-- 上传中状态 -->
+            <div v-if="certUploading" class="upload-loading">
+              <svg class="spinner" width="24" height="24" viewBox="0 0 24 24" fill="none">
+                <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" opacity="0.25"/>
+                <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+              </svg>
+              <span>AI 正在识别证书信息…</span>
+            </div>
+
+            <!-- 识别完成状态 -->
+            <div v-if="certOcrDone" class="upload-done">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+                <polyline points="20,6 9,17 4,12" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              <span>识别完成，信息已自动填充，请核对后确认添加</span>
+            </div>
+          </div>
+
+          <div class="form-divider"></div>
+
+          <div class="form-group"><label class="form-label">证书名称</label><input type="text" class="form-input form-input--lg" v-model="newCert.name" placeholder="证书全称" /></div>
+          <div class="form-group"><label class="form-label">证书类型</label><input type="text" class="form-input form-input--lg" v-model="newCert.type" placeholder="例：施工资质、管理体系" /></div>
+          <div class="form-group"><label class="form-label">颁发机构</label><input type="text" class="form-input form-input--lg" v-model="newCert.issuer" placeholder="颁发机构名称" /></div>
+          <div class="form-group"><label class="form-label">到期日期</label><input type="date" class="form-input form-input--lg" v-model="newCert.expire" /></div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn--ghost" @click="closeAddCert">取消</button>
+          <button class="btn btn--primary" @click="addCert" :disabled="!newCert.name">确认添加</button>
+        </div>
+      </div>
+    </div>
+  </Transition>
+
+</div>
+
+<script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+<script src="/static/js/app.js"></script>
+</body>
+</html>

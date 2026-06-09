@@ -1,0 +1,1214 @@
+/**
+ * BidTool — 投标工具 Vue 3 应用逻辑
+ * 7 个导航模块：工作台 / 文件管理 / 招标分析 / 资质管理 / 区域查询 / 报价调整 / 历史记录
+ * + 底部设置入口
+ */
+const { createApp, ref, reactive, computed, onMounted, watch } = Vue;
+
+createApp({
+  setup() {
+    // ── 状态 ────────────────────────────────────────────────
+    const activeView = ref('dashboard');
+    const sidebarCollapsed = ref(false);
+    const apiStatus = ref(true);
+    const searchQuery = ref('');
+
+    // ── 导航项 ──────────────────────────────────────────────
+    const mainNavItems = ref([
+      {
+        id: 'dashboard',
+        label: '工作台',
+        icon: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+          <rect x="3" y="3" width="7" height="7" rx="1" stroke="currentColor" stroke-width="1.8"/>
+          <rect x="14" y="3" width="7" height="7" rx="1" stroke="currentColor" stroke-width="1.8"/>
+          <rect x="3" y="14" width="7" height="7" rx="1" stroke="currentColor" stroke-width="1.8"/>
+          <rect x="14" y="14" width="7" height="7" rx="1" stroke="currentColor" stroke-width="1.8"/>
+        </svg>`,
+      },
+      {
+        id: 'files',
+        label: '文件管理',
+        icon: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+          <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+        </svg>`,
+        count: null,
+      },
+      {
+        id: 'analysis',
+        label: '招标分析',
+        icon: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+          <polyline points="22,12 18,12 15,21 9,3 6,12 2,12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>`,
+        count: null,
+      },
+    ]);
+
+    const toolNavItems = ref([
+      {
+        id: 'certs',
+        label: '资质管理',
+        icon: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+          <circle cx="12" cy="8" r="6" stroke="currentColor" stroke-width="1.8"/>
+          <path d="M8.56 14.3a4 4 0 1 0 6.88 0" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+        </svg>`,
+      },
+      {
+        id: 'region',
+        label: '区域查询',
+        icon: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+          <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" stroke="currentColor" stroke-width="1.8"/>
+          <circle cx="12" cy="10" r="3" stroke="currentColor" stroke-width="1.8"/>
+        </svg>`,
+      },
+      {
+        id: 'pricing',
+        label: '报价调整',
+        icon: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+          <line x1="12" y1="1" x2="12" y2="23" stroke="currentColor" stroke-width="1.8"/>
+          <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>`,
+      },
+    ]);
+
+    // ── 文件管理 ────────────────────────────────────────────
+    const files = ref([]);
+    const folders = ref([]);
+    const currentFolder = ref('');
+    const showNewFolder = ref(false);
+    const newFolderName = ref('');
+    const creating = ref(false);
+
+    const loadFiles = async () => {
+      try {
+        const url = currentFolder.value ? `/api/files?folder=${encodeURIComponent(currentFolder.value)}` : '/api/files';
+        const res = await fetch(url);
+        const data = await res.json();
+        files.value = data.files || [];
+        folders.value = data.folders || [];
+      } catch { apiStatus.value = false; }
+    };
+
+    const uploadFiles = async (e) => {
+      const fileList = e.target.files;
+      if (!fileList.length) return;
+      const form = new FormData();
+      if (currentFolder.value) form.append('folder', currentFolder.value);
+      for (const f of fileList) form.append('file', f);
+      try {
+        await fetch('/api/files/upload', { method: 'POST', body: form });
+        await loadFiles();
+      } catch {}
+      e.target.value = '';
+    };
+
+    const createFolder = async () => {
+      const name = newFolderName.value.trim();
+      if (!name || creating.value) return;
+      creating.value = true;
+      try {
+        const body = { name };
+        if (currentFolder.value) body.parent = currentFolder.value;
+        const res = await fetch('/api/files/folder', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        const data = await res.json();
+        if (data.success) {
+          newFolderName.value = '';
+          showNewFolder.value = false;
+          await loadFiles();
+        } else {
+          alert(data.message || '创建失败');
+        }
+      } catch (e) {
+        alert('创建失败：服务未连接，请确认后端已启动');
+      }
+      creating.value = false;
+    };
+
+    const enterFolder = async (name) => {
+      currentFolder.value = currentFolder.value ? `${currentFolder.value}/${name}` : name;
+      await loadFiles();
+    };
+
+    const navigateToFolder = async (path) => {
+      currentFolder.value = path;
+      await loadFiles();
+    };
+
+    const deleteFolder = async (name) => {
+      if (!confirm(`确认删除文件夹「${name}」及其所有内容？`)) return;
+      const folderPath = currentFolder.value ? `${currentFolder.value}/${name}` : name;
+      await fetch(`/api/files/folder/${encodeURIComponent(folderPath)}`, { method: 'DELETE' });
+      await loadFiles();
+    };
+
+    const deleteFile = async (name) => {
+      if (!confirm(`确认删除文件「${name}」？`)) return;
+      const filePath = currentFolder.value ? `${currentFolder.value}/${name}` : name;
+      await fetch(`/api/files/${encodeURIComponent(filePath)}`, { method: 'DELETE' });
+      await loadFiles();
+    };
+
+    const formatSize = (bytes) => {
+      if (bytes < 1024) return bytes + ' B';
+      if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+      return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+    };
+
+    const formatDate = (ts) => {
+      const d = new Date(ts * 1000);
+      return d.toLocaleDateString('zh-CN') + ' ' + d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+    };
+
+    const getFileEmoji = (type) => {
+      const map = { PDF: '📄', DOCX: '📝', DOC: '📝', XLSX: '📊', XLS: '📊', ZIP: '🗜', RAR: '🗜', PNG: '🖼', JPG: '🖼', JPEG: '🖼' };
+      return map[type] || '📁';
+    };
+
+    // ── 项目管理 ────────────────────────────────────────────
+    const projects = ref([]);
+    const currentProject = ref(null);
+    const projectFiles = ref([]);
+    const currentProjectFields = ref([]);
+    const currentProjectRisks = ref([]);
+    const projectTab = ref('files');
+    const projectSearchKeyword = ref('');
+    const showNewProject = ref(false);
+    const newProject = reactive({
+      name: '', announcement_url: '',
+      fetchingUrl: false, creating: false
+    });
+    const newProjectFiles = ref([]);
+    const newProjectUploadDragover = ref(false);
+    const newProjectFilesInput = ref(null);
+    const extracting = ref(false);
+    const editingField = ref(null);
+    const fieldEditValue = ref('');
+
+    const loadProjects = async () => {
+      try {
+        const params = new URLSearchParams();
+        if (projectSearchKeyword.value) params.set('keyword', projectSearchKeyword.value);
+        const res = await fetch(`/api/projects?${params.toString()}`);
+        const data = await res.json();
+        projects.value = data.projects || [];
+      } catch {}
+    };
+
+    // 格式化文件大小
+    const formatFileSize = (bytes) => {
+      if (bytes < 1024) return bytes + ' B';
+      if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+      return (bytes / 1024 / 1024).toFixed(1) + ' MB';
+    };
+
+    // 取消新建项目：重置全部状态
+    const cancelNewProject = () => {
+      showNewProject.value = false;
+      newProject.name = '';
+      newProject.announcement_url = '';
+      newProject.fetchingUrl = false;
+      newProject.creating = false;
+      newProjectFiles.value = [];
+    };
+
+    // 删除项目
+    const deleteProject = async (projectId, event) => {
+      if (event) event.stopPropagation();
+      if (!confirm('确定删除该项目？所有关联文件、字段和风险数据都将被删除。')) {
+        return;
+      }
+      try {
+        const res = await fetch(`/api/projects/${projectId}`, { method: 'DELETE' });
+        const data = await res.json();
+        if (data.success) {
+          // 如果当前打开的就是被删除的项目，回到列表
+          if (currentProject.value && currentProject.value.id === projectId) {
+            currentProject.value = null;
+          }
+          await loadProjects();
+        }
+      } catch (e) {
+        console.error('删除项目失败:', e);
+        alert('删除项目失败');
+      }
+    };
+
+    // 抓取网页公告
+    const fetchAnnouncementUrl = async () => {
+      if (!newProject.announcement_url) return;
+      newProject.fetchingUrl = true;
+      console.log('[抓取公告] 请求URL:', newProject.announcement_url);
+      try {
+        const res = await fetch('/api/projects/fetch-url', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: newProject.announcement_url })
+        });
+        const data = await res.json();
+        console.log('[抓取公告] 后端返回:', data);
+        console.log('[抓取公告] 匹配到的正则:', data.matched_pattern || '(无匹配)');
+        console.log('[抓取公告] 匹配来源:', data.matched_source || '(无)');
+        console.log('[抓取公告] 原始匹配行:', data.matched_raw_line || '(无)');
+        console.log('[抓取公告] 内容区来源:', data.content_source || '(无)');
+        console.log('[抓取公告] 提取的项目名称:', data.title);
+        console.log('[抓取公告] 内容区含"项目名称"的行:', data.lines_with_project_name_in_content || []);
+        console.log('[抓取公告] 整页含"项目名称"的行:', data.lines_with_project_name_in_all_text || []);
+        if (data.fallback_from_html_title) {
+          console.log('[抓取公告] 使用HTML <title> 作为兜底:', data.fallback_from_html_title);
+        }
+        if (data.success) {
+          if (data.title) {
+            newProject.name = data.title;
+          }
+        } else {
+          alert(data.message || '抓取失败');
+        }
+      } catch (e) {
+        console.error('抓取网页失败:', e);
+        alert('抓取网页失败');
+      }
+      newProject.fetchingUrl = false;
+    };
+
+    // 处理文件拖放
+    const handleNewProjectFileDrop = (e) => {
+      newProjectUploadDragover.value = false;
+      const files = Array.from(e.dataTransfer.files);
+      addNewProjectFiles(files);
+    };
+
+    // 处理文件选择
+    const handleNewProjectFileSelect = (e) => {
+      const files = Array.from(e.target.files);
+      addNewProjectFiles(files);
+      e.target.value = '';
+    };
+
+    // 添加文件到列表
+    const addNewProjectFiles = (files) => {
+      const allowedTypes = ['.pdf', '.doc', '.docx', '.png', '.jpg', '.jpeg', '.zip', '.rar'];
+      for (const file of files) {
+        const ext = file.name.toLowerCase().slice(file.name.lastIndexOf('.'));
+        if (allowedTypes.includes(ext)) {
+          // 避免重复添加
+          if (!newProjectFiles.value.some(f => f.name === file.name && f.size === file.size)) {
+            newProjectFiles.value.push(file);
+          }
+        }
+      }
+    };
+
+    // 移除文件
+    const removeNewProjectFile = (idx) => {
+      newProjectFiles.value.splice(idx, 1);
+    };
+
+    // 创建项目并分析
+    const createProjectAndAnalyze = async () => {
+      if (!newProject.announcement_url) return;
+      if (newProjectFiles.value.length === 0) return;
+
+      newProject.creating = true;
+      try {
+        // 1. 创建项目
+        const res = await fetch('/api/projects', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: newProject.name || '未命名项目',
+            announcement_url: newProject.announcement_url
+          }),
+        });
+        const data = await res.json();
+        if (!data.success) {
+          newProject.creating = false;
+          return;
+        }
+
+        const projectId = data.project.id;
+
+        // 2. 上传文件
+        for (const file of newProjectFiles.value) {
+          const form = new FormData();
+          form.append('file', file);
+          try {
+            await fetch(`/api/projects/${projectId}/files`, { method: 'POST', body: form });
+          } catch (e) {
+            console.error('上传文件失败:', file.name, e);
+          }
+        }
+
+        // 3. 关闭弹窗并重置
+        showNewProject.value = false;
+        Object.assign(newProject, {
+          name: '', announcement_url: '',
+          fetchingUrl: false, creating: false
+        });
+        newProjectFiles.value = [];
+
+        // 4. 刷新列表并打开项目
+        await loadProjects();
+        await openProject(projectId);
+
+        // 5. 自动开始解析
+        try {
+          await fetch(`/api/projects/${projectId}/parse-all`, { method: 'POST' });
+        } catch (e) {
+          console.error('解析失败:', e);
+        }
+
+        // 6. 刷新项目数据
+        await openProject(projectId);
+
+      } catch (e) {
+        console.error('创建项目失败:', e);
+      }
+      newProject.creating = false;
+    };
+
+    const openProject = async (projectId) => {
+      try {
+        const res = await fetch(`/api/projects/${projectId}`);
+        const data = await res.json();
+        if (data.project) {
+          currentProject.value = data.project;
+          projectFiles.value = data.files || [];
+          currentProjectFields.value = data.fields || [];
+          currentProjectRisks.value = data.risks || [];
+          projectTab.value = 'files';
+        }
+      } catch {}
+    };
+
+    const closeProject = () => {
+      currentProject.value = null;
+      projectFiles.value = [];
+      currentProjectFields.value = [];
+      currentProjectRisks.value = [];
+    };
+
+    const uploadProjectFiles = async (e) => {
+      const fileList = e.target.files;
+      if (!fileList.length || !currentProject.value) return;
+      for (const f of fileList) {
+        const form = new FormData();
+        form.append('file', f);
+        try {
+          await fetch(`/api/projects/${currentProject.value.id}/files`, { method: 'POST', body: form });
+        } catch {}
+      }
+      e.target.value = '';
+      await loadProjectFiles();
+    };
+
+    const loadProjectFiles = async () => {
+      if (!currentProject.value) return;
+      try {
+        const res = await fetch(`/api/projects/${currentProject.value.id}/files`);
+        const data = await res.json();
+        projectFiles.value = data.files || [];
+      } catch {}
+    };
+
+    const parseProjectFile = async (file) => {
+      try {
+        await fetch(`/api/projects/${currentProject.value.id}/files/${file.id}/parse`, { method: 'POST' });
+        await loadProjectFiles();
+      } catch {}
+    };
+
+    const parseAllProjectFiles = async () => {
+      try {
+        await fetch(`/api/projects/${currentProject.value.id}/parse-all`, { method: 'POST' });
+        await loadProjectFiles();
+      } catch {}
+    };
+
+    const extractProjectInfo = async () => {
+      if (!currentProject.value) return;
+      extracting.value = true;
+      try {
+        const res = await fetch(`/api/projects/${currentProject.value.id}/extract`, { method: 'POST' });
+        const data = await res.json();
+        if (data.success) {
+          await openProject(currentProject.value.id);
+        } else {
+          alert(data.message || 'AI 提取失败');
+        }
+      } catch (e) {
+        alert('AI 提取请求失败');
+      }
+      extracting.value = false;
+    };
+
+    const deleteProjectFile = async (file) => {
+      if (!confirm(`确认删除文件「${file.original_name}」？`)) return;
+      try {
+        await fetch(`/api/projects/${currentProject.value.id}/files/${file.id}`, { method: 'DELETE' });
+        await loadProjectFiles();
+      } catch {}
+    };
+
+    const downloadProjectFile = (file) => {
+      window.open(`/api/projects/${currentProject.value.id}/files/${file.id}/download`, '_blank');
+    };
+
+    const startEditField = (field) => {
+      editingField.value = field.id;
+      fieldEditValue.value = field.confirmed_value || field.machine_value || '';
+    };
+
+    const saveFieldReview = async (field) => {
+      try {
+        await fetch(`/api/projects/${currentProject.value.id}/fields/${field.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ confirmed_value: fieldEditValue.value, review_status: 'modified' }),
+        });
+        field.confirmed_value = fieldEditValue.value;
+        field.review_status = 'modified';
+        editingField.value = null;
+      } catch {}
+    };
+
+    const confirmRisk = async (risk) => {
+      try {
+        await fetch(`/api/projects/${currentProject.value.id}/risks/${risk.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ review_status: 'confirmed' }),
+        });
+        risk.review_status = 'confirmed';
+      } catch {}
+    };
+
+    const ignoreRisk = async (risk) => {
+      try {
+        await fetch(`/api/projects/${currentProject.value.id}/risks/${risk.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ review_status: 'ignored' }),
+        });
+        risk.review_status = 'ignored';
+      } catch {}
+    };
+
+    const exportProjectFields = () => {
+      if (currentProject.value) {
+        window.open(`/api/projects/${currentProject.value.id}/export/fields`, '_blank');
+      }
+    };
+
+    const exportProjectRisks = () => {
+      if (currentProject.value) {
+        window.open(`/api/projects/${currentProject.value.id}/export/risks`, '_blank');
+      }
+    };
+
+    const fieldReviewStats = computed(() => {
+      const fields = currentProjectFields.value;
+      return {
+        total: fields.length,
+        pending: fields.filter(f => f.review_status === 'pending').length,
+        confirmed: fields.filter(f => f.review_status === 'confirmed').length,
+        modified: fields.filter(f => f.review_status === 'modified').length,
+      };
+    });
+
+    const riskReviewStats = computed(() => {
+      const risks = currentProjectRisks.value;
+      return {
+        total: risks.length,
+        pending: risks.filter(r => r.review_status === 'pending').length,
+        confirmed: risks.filter(r => r.review_status === 'confirmed').length,
+      };
+    });
+
+    const riskStats = computed(() => {
+      const risks = currentProjectRisks.value;
+      return {
+        high: risks.filter(r => r.severity === 'high').length,
+        medium: risks.filter(r => r.severity === 'medium').length,
+        low: risks.filter(r => r.severity === 'low').length,
+      };
+    });
+
+    const getProjectStatusLabel = (status) => {
+      const map = { pending: '待处理', parsing: '解析中', parsed: '已解析', extracting: 'AI分析中', reviewing: '复核中', completed: '已完成' };
+      return map[status] || status;
+    };
+
+    const getParseStatusLabel = (status) => {
+      const map = { pending: '待解析', parsing: '解析中', done: '已解析', failed: '解析失败' };
+      return map[status] || status;
+    };
+
+    const getFieldReviewLabel = (status) => {
+      const map = { pending: '待复核', confirmed: '已确认', modified: '已修改', ignored: '已忽略' };
+      return map[status] || status;
+    };
+
+    const getRiskReviewLabel = (status) => {
+      const map = { pending: '待复核', confirmed: '已确认', ignored: '已忽略' };
+      return map[status] || status;
+    };
+
+    const getRiskSeverityLabel = (severity) => {
+      const map = { high: '高风险', medium: '中风险', low: '低风险', unknown: '待确认' };
+      return map[severity] || severity;
+    };
+
+    // 兼容旧的分析记录
+    const analysisRecords = ref([]);
+    const newAnalysis = reactive({ title: '', file: '', options: ['key_info'] });
+    const analysisOptions = [
+      { value: 'key_info', label: '提取关键信息（时间、金额、条件）' },
+      { value: 'risk', label: '风险点分析' },
+    ];
+
+    const loadAnalysis = async () => {
+      await loadProjects();
+      analysisRecords.value = projects.value.slice(0, 5).map(p => ({
+        id: p.id, title: p.name, file: '', status: p.status === 'completed' ? 'done' : 'pending', created_at: p.created_at
+      }));
+    };
+
+    const startAnalysis = async () => {
+      if (!newAnalysis.title) return;
+      await createProject();
+      newAnalysis.title = '';
+    };
+
+    // ── 资质管理 ────────────────────────────────────────────
+    const certs = ref([]);
+    const certCategories = ref([]);
+    const certCatFilter = ref('');
+    const certFilter = ref('all');
+    const showAddCert = ref(false);
+    const newCert = reactive({ name: '', type: '', issuer: '', expire: '', category: '' });
+    const certFileInput = ref(null);
+    const certUploading = ref(false);
+    const certOcrDone = ref(false);
+    const certUploadDragover = ref(false);
+    const certUploadedFile = ref(null);
+
+    // 分类管理
+    const showAddCertCat = ref(false);
+    const newCertCatName = ref('');
+    const renameCertCatTarget = ref(null);
+    const renameCertCatName = ref('');
+
+    const filteredCerts = computed(() => {
+      let result = certs.value;
+      if (certCatFilter.value) {
+        result = result.filter(c => (c.category || '未分类') === certCatFilter.value);
+      }
+      if (certFilter.value === 'valid') {
+        result = result.filter(c => c.status !== 'expired');
+      } else if (certFilter.value === 'expired') {
+        result = result.filter(c => c.status === 'expired');
+      }
+      return result;
+    });
+
+    const loadCerts = async (category = '') => {
+      try {
+        const url = category ? `/api/certs?category=${encodeURIComponent(category)}` : '/api/certs';
+        const res = await fetch(url);
+        const data = await res.json();
+        certs.value = data.certs || [];
+      } catch {}
+    };
+
+    const loadCertCategories = async () => {
+      try {
+        const res = await fetch('/api/certs/categories');
+        const data = await res.json();
+        certCategories.value = data.categories || [];
+      } catch {}
+    };
+
+    const loadAllCertsData = async () => {
+      await Promise.all([loadCerts(), loadCertCategories()]);
+    };
+
+    const resetCertForm = () => {
+      Object.assign(newCert, { name: '', type: '', issuer: '', expire: '', category: '' });
+      certOcrDone.value = false;
+      certUploadedFile.value = null;
+    };
+
+    const closeAddCert = () => {
+      showAddCert.value = false;
+      resetCertForm();
+    };
+
+    const triggerCertFileInput = () => {
+      if (!certUploading.value) certFileInput.value?.click();
+    };
+
+    const uploadCertFileAndRecognize = async (file) => {
+      if (!file) return;
+      certUploading.value = true;
+      certOcrDone.value = false;
+      certUploadedFile.value = null;
+      try {
+        const form = new FormData();
+        form.append('file', file);
+        const res = await fetch('/api/certs/ocr', { method: 'POST', body: form });
+        const data = await res.json();
+        if (data.success && data.data) {
+          Object.assign(newCert, {
+            name: data.data.name || '',
+            type: data.data.type || '',
+            issuer: data.data.issuer || '',
+            expire: data.data.expire || '',
+            category: data.data.type || '',
+          });
+          if (data.file) {
+            certUploadedFile.value = data.file;
+          }
+          certOcrDone.value = true;
+        } else {
+          alert(data.message || '识别失败，请手动填写');
+        }
+      } catch (e) {
+        alert('识别请求失败：服务未连接或模型未配置，请先在设置中启用大模型');
+      }
+      certUploading.value = false;
+    };
+
+    const handleCertFileChange = (e) => {
+      const file = e.target.files[0];
+      if (file) uploadCertFileAndRecognize(file);
+      e.target.value = '';
+    };
+
+    const handleCertFileDrop = (e) => {
+      certUploadDragover.value = false;
+      const file = e.dataTransfer.files[0];
+      if (file) uploadCertFileAndRecognize(file);
+    };
+
+    const addCert = async () => {
+      if (!newCert.name) return;
+      const body = {
+        name: newCert.name,
+        type: newCert.type,
+        issuer: newCert.issuer,
+        expire: newCert.expire,
+        category: newCert.category || newCert.type || '未分类',
+      };
+      if (certUploadedFile.value) {
+        body.file_name = certUploadedFile.value.name;
+        body.file_path = certUploadedFile.value.path;
+        body.file_size = certUploadedFile.value.size;
+      }
+      await fetch('/api/certs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      resetCertForm();
+      showAddCert.value = false;
+      await loadAllCertsData();
+    };
+
+    const deleteCert = async (id) => {
+      if (!confirm('确认删除该证书？关联文件也将被删除。')) return;
+      await fetch(`/api/certs/${id}`, { method: 'DELETE' });
+      await loadAllCertsData();
+    };
+
+    const downloadCertFile = (cert) => {
+      if (cert.id) {
+        window.open(`/api/certs/${cert.id}/download`, '_blank');
+      }
+    };
+
+    const addCertCategory = async () => {
+      const name = newCertCatName.value.trim();
+      if (!name) return;
+      try {
+        await fetch('/api/certs/categories', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name }),
+        });
+      } catch {}
+      newCertCatName.value = '';
+      showAddCertCat.value = false;
+      await loadAllCertsData();
+    };
+
+    const startRenameCat = (cat) => {
+      renameCertCatTarget.value = cat.name;
+      renameCertCatName.value = cat.name;
+    };
+
+    const doRenameCat = async () => {
+      const newName = renameCertCatName.value.trim();
+      if (!newName || !renameCertCatTarget.value) return;
+      try {
+        await fetch(`/api/certs/categories/${encodeURIComponent(renameCertCatTarget.value)}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: newName }),
+        });
+      } catch {}
+      renameCertCatTarget.value = null;
+      await loadAllCertsData();
+    };
+
+    const deleteCertCat = async (cat) => {
+      if (!confirm(`确认删除分类「${cat.name}」？分类下的证书将移到「未分类」。`)) return;
+      try {
+        await fetch(`/api/certs/categories/${encodeURIComponent(cat.name)}`, { method: 'DELETE' });
+      } catch {}
+      await loadAllCertsData();
+    };
+
+    const getCertStatusClass = (cert) => {
+      if (cert.status === 'expired') return 'cert-status--expired';
+      if (!cert.expire) return 'cert-status--valid';
+      const diff = (new Date(cert.expire) - new Date()) / (1000 * 86400);
+      if (diff < 0)   return 'cert-status--expired';
+      if (diff < 90)  return 'cert-status--warning';
+      return 'cert-status--valid';
+    };
+
+    const getCertStatusLabel = (cert) => {
+      if (cert.status === 'expired') return '已过期';
+      if (!cert.expire) return '有效';
+      const diff = (new Date(cert.expire) - new Date()) / (1000 * 86400);
+      if (diff < 0)  return '已过期';
+      if (diff < 30) return `${Math.ceil(diff)} 天后到期`;
+      if (diff < 90) return '即将到期';
+      return '有效';
+    };
+
+    // ── 仪表盘统计 ──────────────────────────────────────────
+    const fileCount = computed(() => files.value.length);
+    const analysisCount = computed(() => analysisRecords.value.length);
+    const certCount = computed(() => certs.value.length);
+
+    const expiringSoon = computed(() => {
+      return certs.value.filter(c => {
+        if (c.status === 'expired') return true;
+        if (!c.expire) return false;
+        const diff = (new Date(c.expire) - new Date()) / (1000 * 86400);
+        return diff < 90;
+      });
+    });
+
+    const expiringSoonCount = computed(() => expiringSoon.value.length);
+
+    // ── 区域查询 ────────────────────────────────────────────
+    const regions = ref([]);
+    const biddingList = ref([]);
+    const biddingTotal = ref(0);
+    const biddingPage = ref(1);
+    const biddingPerPage = ref(15);
+    const biddingTotalPages = ref(1);
+    const biddingRefreshing = ref(false);
+    const bidSearchKeyword = ref('');
+    const bidProvinceFilter = ref('');
+    const bidCityFilter = ref('');
+    const bidCategoryFilter = ref('');
+    const bidStatusFilter = ref('');
+    const bidCategories = ref([]);
+    const bidDetailVisible = ref(false);
+    const bidDetail = ref(null);
+    const biddingStats = ref({ total: 0, bidding: 0, expiring_soon: 0, awarded: 0 });
+
+    const bidFilterCities = computed(() => {
+      const found = regions.value.find(r => r.province === bidProvinceFilter.value);
+      return found ? found.cities : [];
+    });
+
+    const loadRegions = async () => {
+      try {
+        const res = await fetch('/api/regions');
+        const data = await res.json();
+        regions.value = data.regions || [];
+        // 提取类别
+        const cats = new Set();
+        data.regions?.forEach(r => r.cities?.forEach(() => {}));
+        bidCategories.value = ['工程建设', 'IT 服务', '咨询服务', '物资采购', '设备采购', '物业服务', '设计服务', '监理服务'];
+      } catch {}
+    };
+
+    const loadBidding = async (page = 1) => {
+      try {
+        const params = new URLSearchParams();
+        params.set('page', page);
+        params.set('per_page', biddingPerPage.value);
+        if (bidProvinceFilter.value) params.set('province', bidProvinceFilter.value);
+        if (bidCityFilter.value) params.set('city', bidCityFilter.value);
+        if (bidCategoryFilter.value) params.set('category', bidCategoryFilter.value);
+        if (bidStatusFilter.value) params.set('status', bidStatusFilter.value);
+        if (bidSearchKeyword.value) params.set('keyword', bidSearchKeyword.value);
+
+        const res = await fetch(`/api/bidding?${params.toString()}`);
+        const data = await res.json();
+        biddingList.value = data.items || [];
+        biddingTotal.value = data.total || 0;
+        biddingPage.value = data.page || 1;
+        biddingTotalPages.value = data.total_pages || 1;
+      } catch {}
+    };
+
+    const loadBiddingStats = async () => {
+      try {
+        const res = await fetch('/api/bidding/stats');
+        const data = await res.json();
+        biddingStats.value = {
+          total: data.total || 0,
+          bidding: data.by_status?.['招标中'] || 0,
+          expiring_soon: data.expiring_soon || 0,
+          awarded: data.by_status?.['已中标'] || 0,
+        };
+      } catch {}
+    };
+
+    const searchBidding = async () => {
+      await loadBidding(1);
+    };
+
+    const onBidProvinceChange = () => {
+      bidCityFilter.value = '';
+      loadBidding(1);
+    };
+
+    const goBidPage = async (page) => {
+      await loadBidding(page);
+    };
+
+    const refreshBidding = async () => {
+      biddingRefreshing.value = true;
+      try {
+        await fetch('/api/bidding/refresh', { method: 'POST' });
+        await Promise.all([loadBidding(1), loadBiddingStats()]);
+      } catch {}
+      biddingRefreshing.value = false;
+    };
+
+    const showBidDetail = (item) => {
+      bidDetail.value = item;
+      bidDetailVisible.value = true;
+    };
+
+    const isBidExpiringSoon = (item) => {
+      if (!item.deadline || item.status !== '招标中') return false;
+      const diff = (new Date(item.deadline) - new Date()) / (1000 * 86400);
+      return diff >= 0 && diff <= 7;
+    };
+
+    const getBidStatusClass = (item) => {
+      if (item.status === '招标中') return 'active';
+      if (item.status === '已截止') return 'closed';
+      if (item.status === '已中标') return 'awarded';
+      return '';
+    };
+
+    // ── 报价调整 ────────────────────────────────────────────
+    const pricingProjects = ref([]);
+    const currentPricingId = ref(null);
+    const currentPricing = ref(null);
+    const pricingForm = reactive({ name: '', description: '', strategy: 'balanced', profit_rate: 15, tax_rate: 6, discount: 0 });
+    const pricingStrategies = ref([
+      { id: 'aggressive', name: '激进策略', color: 'peach', desc: '薄利多销' },
+      { id: 'balanced', name: '平衡策略', color: 'purple', desc: '兼顾利润与竞争力' },
+      { id: 'conservative', name: '保守策略', color: 'mint', desc: '高利润空间' },
+    ]);
+    const pricingCategories = ref([
+      { id: 'labor', name: '人工成本' },
+      { id: 'material', name: '材料成本' },
+      { id: 'equipment', name: '设备成本' },
+      { id: 'service', name: '服务费用' },
+      { id: 'travel', name: '差旅费用' },
+      { id: 'other', name: '其他费用' },
+    ]);
+    const showNewPricing = ref(false);
+    const newPricingName = ref('');
+    const newPricingDesc = ref('');
+    const showAddPricingItem = ref(false);
+    const newItem = reactive({ name: '', category: 'labor', unit_price: 0, quantity: 1, unit: '项', note: '' });
+    let savePricingMetaTimer = null;
+
+    const loadPricingProjects = async () => {
+      try {
+        const res = await fetch('/api/pricing');
+        const data = await res.json();
+        pricingProjects.value = data.projects || [];
+      } catch {}
+    };
+
+    const startNewPricing = () => {
+      newPricingName.value = '';
+      newPricingDesc.value = '';
+      showNewPricing.value = true;
+    };
+
+    const createPricingProject = async () => {
+      if (!newPricingName.value.trim()) return;
+      try {
+        const res = await fetch('/api/pricing', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: newPricingName.value.trim(), description: newPricingDesc.value.trim() }),
+        });
+        const data = await res.json();
+        if (data.success) {
+          showNewPricing.value = false;
+          await loadPricingProjects();
+          await selectPricingProject(data.project.id);
+        }
+      } catch {}
+    };
+
+    const selectPricingProject = async (id) => {
+      try {
+        const res = await fetch(`/api/pricing/${id}`);
+        const data = await res.json();
+        if (data.success) {
+          currentPricingId.value = id;
+          currentPricing.value = data.project;
+          Object.assign(pricingForm, {
+            name: data.project.name || '',
+            description: data.project.description || '',
+            strategy: data.project.strategy || 'balanced',
+            profit_rate: data.project.profit_rate ?? 15,
+            tax_rate: data.project.tax_rate ?? 6,
+            discount: data.project.discount ?? 0,
+          });
+        }
+      } catch {}
+    };
+
+    const deletePricingProject = async (id) => {
+      if (!confirm('确认删除该报价项目？')) return;
+      try {
+        await fetch(`/api/pricing/${id}`, { method: 'DELETE' });
+        if (currentPricingId.value === id) {
+          currentPricingId.value = null;
+          currentPricing.value = null;
+        }
+        await loadPricingProjects();
+      } catch {}
+    };
+
+    const savePricingMeta = async () => {
+      if (!currentPricingId.value) return;
+      try {
+        const res = await fetch(`/api/pricing/${currentPricingId.value}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: pricingForm.name,
+            description: pricingForm.description,
+            strategy: pricingForm.strategy,
+            profit_rate: pricingForm.profit_rate,
+            tax_rate: pricingForm.tax_rate,
+            discount: pricingForm.discount,
+          }),
+        });
+        const data = await res.json();
+        if (data.success) {
+          currentPricing.value = data.project;
+          await loadPricingProjects();
+        }
+      } catch {}
+    };
+
+    const savePricingMetaDebounced = () => {
+      if (savePricingMetaTimer) clearTimeout(savePricingMetaTimer);
+      savePricingMetaTimer = setTimeout(savePricingMeta, 400);
+    };
+
+    const openAddItem = () => {
+      Object.assign(newItem, { name: '', category: 'labor', unit_price: 0, quantity: 1, unit: '项', note: '' });
+      showAddPricingItem.value = true;
+    };
+
+    const addPricingItem = async () => {
+      if (!newItem.name.trim() || !currentPricingId.value) return;
+      try {
+        const res = await fetch(`/api/pricing/${currentPricingId.value}/items`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(newItem),
+        });
+        const data = await res.json();
+        if (data.success) {
+          currentPricing.value.items = [...(currentPricing.value.items || []), data.item];
+          currentPricing.value.summary = data.summary;
+          showAddPricingItem.value = false;
+        }
+      } catch {}
+    };
+
+    const saveItem = async (item) => {
+      if (!currentPricingId.value) return;
+      try {
+        const res = await fetch(`/api/pricing/${currentPricingId.value}/items/${item.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(item),
+        });
+        const data = await res.json();
+        if (data.success) {
+          currentPricing.value.summary = data.summary;
+        }
+      } catch {}
+    };
+
+    const deleteItem = async (itemId) => {
+      if (!currentPricingId.value || !confirm('确认删除该成本项？')) return;
+      try {
+        const res = await fetch(`/api/pricing/${currentPricingId.value}/items/${itemId}`, { method: 'DELETE' });
+        const data = await res.json();
+        if (data.success) {
+          currentPricing.value.items = currentPricing.value.items.filter(i => i.id !== itemId);
+          currentPricing.value.summary = data.summary;
+        }
+      } catch {}
+    };
+
+    const formatPricingNum = (n) => {
+      if (n === undefined || n === null) return '0';
+      return Number(n).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    };
+
+    // ── 设置 ────────────────────────────────────────────────
+    const modelConfigs = ref([]);
+    const activeModel = ref('');
+    const saving = ref(false);
+    const toastVisible = ref(false);
+    const showKey = ref({});
+    const testingModel = ref(null);
+    const testResults = reactive({});
+
+    const loadConfig = async () => {
+      try {
+        const res = await fetch('/api/config');
+        const data = await res.json();
+        modelConfigs.value = (data.models || []).map(m => ({
+          ...m,
+          supports_vision: m.supports_vision !== undefined ? m.supports_vision : false,
+        }));
+        activeModel.value = data.active_model || '';
+        const keys = {};
+        modelConfigs.value.forEach(m => { keys[m.id] = false; });
+        showKey.value = keys;
+      } catch {}
+    };
+
+    const toggleKeyVisibility = (id) => {
+      showKey.value = { ...showKey.value, [id]: !showKey.value[id] };
+    };
+
+    const testModel = async (model) => {
+      testingModel.value = model.id;
+      delete testResults[model.id];
+      try {
+        const res = await fetch('/api/settings/test-model', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ model_id: model.id }),
+        });
+        const data = await res.json();
+        testResults[model.id] = { ok: data.success, msg: data.message };
+      } catch (e) {
+        testResults[model.id] = { ok: false, msg: '网络请求失败，请检查后端服务是否运行' };
+      }
+      testingModel.value = null;
+    };
+
+    const saveSettings = async () => {
+      saving.value = true;
+      try {
+        await fetch('/api/config', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            models: modelConfigs.value,
+            active_model: activeModel.value,
+          }),
+        });
+        toastVisible.value = true;
+        setTimeout(() => { toastVisible.value = false; }, 2800);
+      } catch {}
+      saving.value = false;
+    };
+
+    // ── 导航 ─────────────────────────────────────────────────
+    const setView = (id) => {
+      activeView.value = id;
+    };
+
+    // ── 初始化 ───────────────────────────────────────────────
+    onMounted(async () => {
+      await Promise.all([loadFiles(), loadAnalysis(), loadAllCertsData(), loadConfig(), loadRegions(), loadBidding(), loadBiddingStats(), loadPricingProjects()]);
+    });
+
+    // ── 区域筛选器变化监听 ─────────────────────────────────
+    watch([bidCategoryFilter, bidStatusFilter], () => {
+      loadBidding(1);
+    });
+
+    return {
+      activeView, sidebarCollapsed, apiStatus, searchQuery,
+      mainNavItems, toolNavItems,
+      files, folders, currentFolder, showNewFolder, newFolderName, creating,
+      uploadFiles, createFolder, enterFolder, navigateToFolder,
+      deleteFile, deleteFolder, formatSize, formatDate, getFileEmoji,
+      // 项目管理
+      projects, currentProject, projectFiles, currentProjectFields, currentProjectRisks,
+      projectTab, projectSearchKeyword, showNewProject, newProject, extracting,
+      editingField, fieldEditValue,
+      newProjectFiles, newProjectFilesInput, newProjectUploadDragover,
+      loadProjects, openProject, closeProject, deleteProject, cancelNewProject,
+      fetchAnnouncementUrl, handleNewProjectFileDrop, handleNewProjectFileSelect,
+      removeNewProjectFile, formatFileSize, createProjectAndAnalyze,
+      uploadProjectFiles, loadProjectFiles, parseProjectFile, parseAllProjectFiles,
+      extractProjectInfo, deleteProjectFile, downloadProjectFile,
+      startEditField, saveFieldReview, confirmRisk, ignoreRisk,
+      exportProjectFields, exportProjectRisks,
+      fieldReviewStats, riskReviewStats, riskStats,
+      getProjectStatusLabel, getParseStatusLabel, getFieldReviewLabel,
+      getRiskReviewLabel, getRiskSeverityLabel,
+      // 兼容旧的分析记录
+      analysisRecords, newAnalysis, analysisOptions, startAnalysis,
+      certs, certCategories, certCatFilter, certFilter, filteredCerts, showAddCert, newCert, certFileInput,
+      certUploading, certOcrDone, certUploadDragover, certUploadedFile,
+      showAddCertCat, newCertCatName, renameCertCatTarget, renameCertCatName,
+      loadCerts, loadAllCertsData, resetCertForm, closeAddCert,
+      triggerCertFileInput, uploadCertFileAndRecognize,
+      handleCertFileChange, handleCertFileDrop,
+      addCert, deleteCert, downloadCertFile,
+      addCertCategory, startRenameCat, doRenameCat, deleteCertCat,
+      getCertStatusClass, getCertStatusLabel,
+      fileCount, analysisCount, certCount, expiringSoon, expiringSoonCount,
+      modelConfigs, activeModel, saving, saveSettings, toastVisible, showKey, toggleKeyVisibility,
+      testingModel, testResults, testModel,
+      setView,
+      // 区域查询
+      regions, biddingList, biddingTotal, biddingPage, biddingPerPage, biddingTotalPages,
+      biddingRefreshing, bidSearchKeyword, bidProvinceFilter, bidCityFilter, bidCategoryFilter,
+      bidStatusFilter, bidCategories, bidFilterCities, bidDetailVisible, bidDetail,
+      biddingStats, searchBidding, onBidProvinceChange, goBidPage, refreshBidding,
+      showBidDetail, isBidExpiringSoon, getBidStatusClass,
+      // 报价调整
+      pricingProjects, currentPricingId, currentPricing, pricingForm, pricingStrategies,
+      pricingCategories, showNewPricing, newPricingName, newPricingDesc,
+      showAddPricingItem, newItem,
+      startNewPricing, createPricingProject, selectPricingProject, deletePricingProject,
+      savePricingMeta, savePricingMetaDebounced, openAddItem, addPricingItem,
+      saveItem, deleteItem, formatPricingNum,
+    };
+  },
+}).mount('#app');
