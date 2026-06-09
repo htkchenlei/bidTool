@@ -581,6 +581,22 @@ def delete_project(project_id):
     if os.path.exists(project_upload_dir):
         shutil.rmtree(project_upload_dir)
 
+    # 删除解析结果
+    project_parsed_dir = os.path.join(PARSED_DIR, project_id)
+    if os.path.exists(project_parsed_dir):
+        shutil.rmtree(project_parsed_dir)
+
+    # 删除关联的导出文件
+    if os.path.exists(EXPORTS_DIR):
+        for fname in os.listdir(EXPORTS_DIR):
+            if project_id in fname:
+                fpath = os.path.join(EXPORTS_DIR, fname)
+                try:
+                    if os.path.isfile(fpath):
+                        os.remove(fpath)
+                except OSError:
+                    pass
+
     return jsonify({"success": True})
 
 
@@ -1288,8 +1304,25 @@ def analyze_project(project_id):
         if os.path.exists(parsed_file):
             with open(parsed_file, "r", encoding="utf-8") as pf:
                 parsed_data = json.load(pf)
+                content_parts = []
                 if parsed_data.get("text"):
-                    all_text_parts.append(f"【文件：{f['original_name']}】\n{parsed_data['text']}")
+                    content_parts.append(parsed_data["text"])
+                # 同时包含表格内容（预算/金额等关键信息常出现在表格中
+                if parsed_data.get("tables"):
+                    table_text_parts = []
+                    for idx, table in enumerate(parsed_data["tables"]):
+                        rows_text = []
+                        for row in table:
+                            if isinstance(row, list):
+                                rows_text.append(" | ".join(str(cell) for cell in row))
+                            else:
+                                rows_text.append(str(row))
+                        if rows_text:
+                            table_text_parts.append("[表格" + str(idx + 1) + "]\n" + "\n".join(rows_text))
+                    if table_text_parts:
+                        content_parts.append("\n\n" + "\n\n".join(table_text_parts))
+                combined_content = "\n".join(content_parts)
+                all_text_parts.append(f"【文件：{f['original_name']}】\n{combined_content}")
 
     if not all_text_parts:
         return jsonify({
