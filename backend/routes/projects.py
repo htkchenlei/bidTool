@@ -197,10 +197,7 @@ def list_projects():
 
 @projects_bp.route("/api/projects/fetch-url", methods=["POST"])
 def fetch_announcement_url():
-    """抓取公告网页内容"""
-    import requests
-    from bs4 import BeautifulSoup
-
+    """抓取公告网页内容（使用 Scrapling 作为 HTTP 爬虫引擎）"""
     body = request.get_json(silent=True) or {}
     url = body.get("url", "")
 
@@ -208,165 +205,92 @@ def fetch_announcement_url():
         return jsonify({"success": False, "message": "请提供网页链接"})
 
     try:
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-        }
-        resp = requests.get(url, headers=headers, timeout=15)
+        from scrapling.fetchers import Fetcher
+        import re
 
-        # 智能编码处理：中国政府采购等网站常使用 GB2312/GBK 而非 UTF-8
-        # 1. 先从原始字节中找 HTML meta charset
-        # 2. 若没找到，尝试 apparent_encoding
-        # 3. 依次尝试 GBK、GB2312、UTF-8
-        detected_charset = None
-        import re as _re
-        # 在原始字节中搜索 charset（兼容中英文编码名）
-        try:
-            header_bytes = resp.content[:2048]
-            meta_match = _re.search(rb'charset=["\']?([A-Za-z0-9\-_]+)', header_bytes, _re.IGNORECASE)
-            if meta_match:
-                detected_charset = meta_match.group(1).decode('ascii').lower()
-        except Exception:
-            pass
+        # 1) 用 Scrapling 的 Fetcher 抓取页面（自动处理 UA、TLS 指纹、编码）
+        page = Fetcher.get(url, stealthy_headers=True, timeout=20)
 
-        charset_candidates = []
-        if detected_charset:
-            charset_candidates.append(detected_charset)
-        if resp.apparent_encoding:
-            charset_candidates.append(resp.apparent_encoding)
-        charset_candidates.extend(["gbk", "gb2312", "utf-8"])
+        # 2) 获取全文（Scrapling 已处理编码）
+        all_text = str(page.get_all_text())
 
-        # 去重并保持顺序
-        seen = set()
-        charset_candidates = [c for c in charset_candidates if not (c in seen or seen.add(c))]
-
-        decoded_text = None
-        used_charset = None
-        for cs in charset_candidates:
-            try:
-                decoded_text = resp.content.decode(cs, errors="replace")
-                used_charset = cs
-                # 验证是否能找到中文关键字
-                if "项目" in decoded_text or "招标" in decoded_text or "采购" in decoded_text:
-                    break
-            except (UnicodeDecodeError, LookupError):
-                continue
-
-        if decoded_text is None:
-            decoded_text = resp.content.decode("utf-8", errors="replace")
-            used_charset = "utf-8-fallback"
-
-        soup = BeautifulSoup(decoded_text, "html.parser")
-
-        # 移除脚本和样式
-        for tag in soup(["script", "style", "nav", "footer", "header"]):
-            tag.decompose()
-
-        # 先提取整页文本作为兜底搜索源
-        all_text = soup.get_text(separator="\n", strip=True)
-
-        # 获取正文：从多个选择器中找文本量最大的那个作为内容区
-        # 同时保留整页文本作为兜底搜索源
-        content_source_label = ""
-
-        # 常见的政府采购网 / 招标公告内容容器 CSS 选择器
-        # 按从最具体到最通用排列
+        # 3) CSS 选择器：优先从特定内容容器中查找（文本量最大的那块）
         candidate_selectors = [
-            ".vF_detail_main",      # 中国政府采购网 (ccgp.gov.cn)
+            ".vF_detail_main",      # 中国政府采购网
             ".vT_detail_main",
-            "div.content",
-            "div.article-content",
-            "div.detail-content",
-            "div.main-content",
-            "div.article-body",
-            "div.detail-info",
-            ".article-detail",
-            ".detail-content",
-            ".content-detail",
-            ".zw",                   # "正文" 拼音简写
-            "article",
-            "div#content",
-            "div#main",
-            ".article",
-            ".detail",
-            ".news",
-            ".news-detail",
-            ".notice-content",
-            ".announcement-content",
-            "table",                 # 很多招标信息放在表格中
-            ".container",
+            "div.content", "div.article-content", "div.detail-content",
+            "div.main-content", "div.article-body", "div.detail-info",
+            ".article-detail", ".detail-content", ".content-detail",
+            ".zw", "article", "div#content", "div#main",
+            ".article", ".detail", ".news", ".news-detail",
+            ".notice-content", ".announcement-content",
+            "table", ".container",
         ]
 
         best_text = ""
-        best_label = ""
+        best_label = "full_page_text"
         for sel in candidate_selectors:
             try:
-                found = soup.select_one(sel)
-                if found:
-                    txt = found.get_text(separator="\n", strip=True)
-                    # 选文本量最大的 (至少要有一些内容才考虑)
-                    if len(txt) > len(best_text) and len(txt) > 50:
+                element = page.css(sel).get()
+                if element is not None:
+                    txt = element.get_text()
+                    if isinstance(txt, str) and len(txt) > len(best_text) and len(txt) > 50:
                         best_text = txt
                         best_label = sel
             except Exception:
                 continue
 
-        # 如果所有选择器都没找到足够内容，用整页文本
         if not best_text:
             best_text = all_text
-            best_label = "full_page_text"
 
-        content_source_label = best_label
-
-        # 清理多余空白
-        lines = [line.strip() for line in best_text.split("\n") if line.strip()]
+        # 4) 清理多余空白行
+        lines = [line.strip() for line in best_text.split("\n") if line and line.strip()]
         content_clean = "\n".join(lines)
 
-        # 获取标题：从网页正文中查找"项目名称"关键字
-        # 同时在：选定内容区、整页文本、原始HTML 三处搜索
-        title = ""
-        matched_pattern = ""
-        matched_line = ""
-        matched_source = ""
-        import re
+        # 5) 在 content_clean 和 all_text 中用正则找 "项目名称"
         project_name_patterns = [
             r"项目名称[：:]\s*([^\n\r]+)",
             r"项目名称\s*[:：]?\s*([^\n\r]+)",
             r"项目名称[\s]*[:：]?[\s]*([^\n\r]+)",
-            # 跨行匹配：项目名称在一行，值在下一行（表格布局常见）
             r"项目名称[：:]?[\s\n\r]+([^\n\r]{2,150})",
         ]
 
-        # 优先从内容区搜索，找不到再从整页文本搜
-        search_sources = [
-            ("content_clean", content_clean),
-            ("all_text", all_text),
-        ]
+        title = ""
+        matched_pattern = ""
+        matched_raw_line = ""
+        matched_source = ""
 
-        for source_name, source_text in search_sources:
+        for source_name, source_text in [("content_clean", content_clean), ("all_text", all_text)]:
             if title:
                 break
             if not source_text:
                 continue
             for i, pattern in enumerate(project_name_patterns):
-                match = re.search(pattern, source_text)
-                if match:
-                    title = match.group(1).strip()
-                    title = title.strip("《》<>''\"")
-                    if len(title) > 100:
-                        title = title[:100]
+                m = re.search(pattern, source_text)
+                if m:
+                    val = m.group(1).strip()
+                    val = val.strip("《》<>''\"")
+                    if len(val) > 100:
+                        val = val[:100]
+                    title = val
                     matched_pattern = f"Pattern {i+1}: {pattern}"
-                    matched_line = match.group(0)[:100]
+                    matched_raw_line = m.group(0)[:100]
                     matched_source = source_name
                     break
 
-        # 如果没找到"项目名称："，尝试从HTML title标签
+        # 6) 兜底：HTML <title> 标签
         fallback_title = ""
-        if not title and soup.title:
-            fallback_title = soup.title.string.strip()
-            title = fallback_title
-            matched_source = "html_title_fallback"
+        if not title:
+            try:
+                html_title = page.css("title::text").get()
+                if html_title:
+                    fallback_title = str(html_title).strip()
+                    title = fallback_title
+                    matched_source = "html_title_fallback"
+            except Exception:
+                pass
 
-        # 找项目名称所在的原始行（用于调试）
+        # 7) 调试信息：content 中含"项目名称"的行
         debug_lines = []
         for line in content_clean.split("\n"):
             if "项目名称" in line:
@@ -385,10 +309,10 @@ def fetch_announcement_url():
             "success": True,
             "title": title,
             "matched_pattern": matched_pattern,
-            "matched_raw_line": matched_line,
+            "matched_raw_line": matched_raw_line,
             "matched_source": matched_source,
             "fallback_from_html_title": fallback_title,
-            "content_source": content_source_label,
+            "content_source": best_label,
             "content_clean_preview": content_clean[:500] if content_clean else "",
             "all_text_preview": all_text[:500] if all_text else "",
             "lines_with_project_name_in_content": debug_lines,

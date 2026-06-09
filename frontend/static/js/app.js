@@ -34,6 +34,21 @@ createApp({
         count: null,
       },
       {
+        id: 'certs',
+        label: '资质管理',
+        icon: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+          <circle cx="12" cy="8" r="6" stroke="currentColor" stroke-width="1.8"/>
+          <path d="M8.56 14.3a4 4 0 1 0 6.88 0" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+        </svg>`,
+      },
+      {
+        id: 'performance',
+        label: '业绩管理',
+        icon: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+          <path d="M12 2l3 6 6.5 1-4.7 4.6 1.1 6.4L12 17.5 6.1 20l1.1-6.4L2.5 9 9 8z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+        </svg>`,
+      },
+      {
         id: 'analysis',
         label: '招标分析',
         icon: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none">
@@ -41,15 +56,13 @@ createApp({
         </svg>`,
         count: null,
       },
-    ]);
-
-    const toolNavItems = ref([
       {
-        id: 'certs',
-        label: '资质管理',
+        id: 'bid_compare',
+        label: '投标比对',
         icon: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-          <circle cx="12" cy="8" r="6" stroke="currentColor" stroke-width="1.8"/>
-          <path d="M8.56 14.3a4 4 0 1 0 6.88 0" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          <path d="M9 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          <path d="M12 3v18" stroke="currentColor" stroke-width="1.8" stroke-dasharray="3 3"/>
         </svg>`,
       },
       {
@@ -69,6 +82,8 @@ createApp({
         </svg>`,
       },
     ]);
+
+    const toolNavItems = ref([]);
 
     // ── 文件管理 ────────────────────────────────────────────
     const files = ref([]);

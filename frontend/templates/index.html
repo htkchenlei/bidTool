@@ -65,18 +65,6 @@
           </a>
         </div>
 
-        <!-- ▸ 辅助工具 -->
-        <a
-          v-for="item in toolNavItems"
-          :key="item.id"
-          class="nav-item"
-          :class="{ 'nav-item--active': activeView === item.id }"
-          @click="setView(item.id)"
-        >
-          <span class="nav-item-icon" v-html="item.icon"></span>
-          <span class="nav-item-label">{{ item.label }}</span>
-        </a>
-
       </nav>
 
       <div class="sidebar-footer">
@@ -696,6 +684,32 @@
               </div>
             </div>
           </main>
+        </div>
+      </div>
+
+      <!-- ▸ 业绩管理 -->
+      <div v-if="activeView === 'performance'" class="view-panel">
+        <div class="page-header">
+          <h1 class="page-title">业绩管理</h1>
+          <p class="page-subtitle">管理公司历史项目业绩，支持按类别、时间筛选</p>
+        </div>
+        <div class="empty-state">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none"><path d="M12 2l3 6 6.5 1-4.7 4.6 1.1 6.4L12 17.5 6.1 20l1.1-6.4L2.5 9 9 8z" stroke="#6b7280" stroke-width="1.5" stroke-linejoin="round"/></svg>
+          <p class="empty-title">暂无业绩记录</p>
+          <p class="empty-desc">在这里记录您的历史项目业绩</p>
+        </div>
+      </div>
+
+      <!-- ▸ 投标比对 -->
+      <div v-if="activeView === 'bid_compare'" class="view-panel">
+        <div class="page-header">
+          <h1 class="page-title">投标比对</h1>
+          <p class="page-subtitle">对比分析多个招标项目的关键信息，辅助投标决策</p>
+        </div>
+        <div class="empty-state">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none"><path d="M9 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h4" stroke="#6b7280" stroke-width="1.5" stroke-linecap="round"/><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" stroke="#6b7280" stroke-width="1.5" stroke-linecap="round"/><path d="M12 3v18" stroke="#6b7280" stroke-width="1.5" stroke-dasharray="3 3"/></svg>
+          <p class="empty-title">暂无对比数据</p>
+          <p class="empty-desc">从「招标分析」中选择项目添加到对比队列</p>
         </div>
       </div>
 
