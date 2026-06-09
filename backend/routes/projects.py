@@ -325,25 +325,116 @@ def fetch_announcement_url():
 
 @projects_bp.route("/api/projects", methods=["POST"])
 def create_project():
-    """创建新项目"""
-    body = request.get_json(silent=True) or {}
-    projects = load_projects()
+    """创建新项目（简化版：接收URL和文件，自动抓取信息）
 
+    请求体（multipart/form-data）:
+    - url: 公告网页地址（必填）
+    - files: 上传的文件（可选，支持多文件）
+
+    流程:
+    1. 用 Scrapling 抓取 URL 内容，提取项目名称/编号/预算金额/招标人
+    2. 创建项目记录
+    3. 解析上传的文件（保存到 uploads/parsed 目录）
+    4. 返回项目信息
+    """
+    url = request.form.get("url", "").strip()
+    if not url:
+        return jsonify({"success": False, "message": "请输入公告网页地址"}), 400
+
+    # 1) 用 Scrapling 抓取 URL 内容
+    scraped_info = {
+        "project_name": "",
+        "project_no": "",
+        "budget_amount": "",
+        "purchaser": "",
+        "agency": "",
+    }
+
+    try:
+        from scrapling.fetchers import Fetcher
+        import re
+
+        page = Fetcher.get(url, stealthy_headers=True, timeout=20)
+        scraped_text = ""
+
+        # 优先从内容容器提取
+        candidate_selectors = [
+            ".vF_detail_main", ".vT_detail_main",
+            "div.content", "div.article-content", "div.detail-content",
+            "div.main-content", "div.article-body", "div.detail-info",
+            ".article-detail", ".detail-content", ".content-detail",
+            ".zw", "article", "div#content", "div#main",
+            ".article", ".detail", ".news", ".news-detail",
+            ".notice-content", ".announcement-content",
+            "table", ".container",
+        ]
+        for sel in candidate_selectors:
+            try:
+                el = page.css(sel).get()
+                if el is not None:
+                    txt = el.get_text()
+                    if isinstance(txt, str) and len(txt) > 100:
+                        scraped_text = txt
+                        break
+            except Exception:
+                continue
+
+        if not scraped_text:
+            try:
+                scraped_text = str(page.get_all_text())
+            except Exception:
+                scraped_text = ""
+
+        # 用正则提取关键字段
+        patterns = {
+            "project_name": [r"项目名称[：:]\s*([^\n\r]+)", r"项目名称\s*[:：]?\s*([^\n\r]+)"],
+            "project_no": [r"项目编号[：:]\s*([^\n\r]+)", r"招标编号[：:]\s*([^\n\r]+)"],
+            "budget_amount": [r"预算金额[：:]\s*([^\n\r]+)", r"预算[：:]\s*([^\n\r]+)"],
+            "purchaser": [r"采购人[：:]\s*([^\n\r]+)", r"招标人[：:]\s*([^\n\r]+)"],
+            "agency": [r"代理机构[：:]\s*([^\n\r]+)", r"招标代理机构[：:]\s*([^\n\r]+)"],
+        }
+
+        for field, pats in patterns.items():
+            for p in pats:
+                m = re.search(p, scraped_text)
+                if m and m.group(1).strip():
+                    val = m.group(1).strip()
+                    val = val.strip("《》<>''\"")
+                    if len(val) > 150:
+                        val = val[:150]
+                    scraped_info[field] = val
+                    break
+
+        # 如果项目名称没找到，回退到 HTML title
+        if not scraped_info["project_name"]:
+            try:
+                title_text = page.css("title::text").get()
+                if title_text:
+                    scraped_info["project_name"] = str(title_text).strip()[:150]
+            except Exception:
+                pass
+
+    except Exception as e:
+        # 抓取失败也允许创建，用 URL 作为名称兜底
+        scraped_info["project_name"] = url[:60] + "..."
+
+    # 2) 创建项目
+    projects = load_projects()
     project_id = str(uuid.uuid4())[:8]
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     project = {
         "id": project_id,
-        "name": body.get("name", "未命名项目"),
-        "project_no": body.get("project_no", ""),
-        "purchaser": body.get("purchaser", ""),
-        "agency": body.get("agency", ""),
-        "budget_amount": body.get("budget_amount", ""),
-        "max_price": body.get("max_price", ""),
-        "bid_deadline": body.get("bid_deadline", ""),
-        "opening_time": body.get("opening_time", ""),
-        "status": "pending",  # pending, parsing, parsed, reviewing, completed
-        "owner": body.get("owner", ""),
+        "name": scraped_info.get("project_name") or "未命名项目",
+        "project_no": scraped_info.get("project_no", ""),
+        "purchaser": scraped_info.get("purchaser", ""),
+        "agency": scraped_info.get("agency", ""),
+        "budget_amount": scraped_info.get("budget_amount", ""),
+        "max_price": "",
+        "bid_deadline": "",
+        "opening_time": "",
+        "announcement_url": url,
+        "status": "pending",  # pending, parsing, extracting, completed
         "risk_count": 0,
         "high_risk_count": 0,
         "created_at": now,
@@ -353,10 +444,48 @@ def create_project():
     projects.insert(0, project)
     save_projects(projects)
 
-    # 初始化字段提取记录
+    # 初始化字段提取记录（空值，等待 AI 分析填充）
     _init_extracted_fields(project_id)
 
-    return jsonify({"success": True, "project": project})
+    # 3) 保存上传的文件
+    project_upload_dir = os.path.join(UPLOADS_DIR, project_id)
+    os.makedirs(project_upload_dir, exist_ok=True)
+
+    files_records = []
+    uploaded_files = request.files.getlist("file") + request.files.getlist("files")
+    for file in uploaded_files:
+        if not file or not file.filename:
+            continue
+        original_name = file.filename
+        ext = os.path.splitext(original_name)[1].lower()
+        file_id = str(uuid.uuid4())[:8]
+        storage_name = f"{file_id}{ext}"
+        storage_path = os.path.join(project_upload_dir, storage_name)
+        file.save(storage_path)
+
+        all_files = load_project_files()
+        file_type = _get_file_type(ext)
+        record = {
+            "id": file_id,
+            "project_id": project_id,
+            "original_name": original_name,
+            "storage_name": storage_name,
+            "storage_path": storage_path,
+            "file_type": file_type,
+            "file_size": os.path.getsize(storage_path),
+            "parse_status": "pending",
+            "page_count": 0,
+            "uploaded_at": now,
+        }
+        all_files.append(record)
+        save_project_files(all_files)
+        files_records.append(record)
+
+    return jsonify({
+        "success": True,
+        "project": project,
+        "files_count": len(files_records),
+    })
 
 
 @projects_bp.route("/api/projects/<project_id>", methods=["GET"])
@@ -1088,4 +1217,128 @@ def parse_all_project_files(project_id):
         "parsed_count": parsed_count,
         "total_count": len(project_files),
         "errors": errors
+    })
+
+
+# ── 开始分析：解析 + AI提取 一条龙 ────────────────────────
+@projects_bp.route("/api/projects/<project_id>/analyze", methods=["POST"])
+def analyze_project(project_id):
+    """一站式分析：先解析所有文件，再用 AI 提取字段和风险"""
+    projects = load_projects()
+    project = next((p for p in projects if p["id"] == project_id), None)
+    if not project:
+        return jsonify({"success": False, "message": "项目不存在"}), 404
+
+    # Step 1: 解析所有未解析的文件
+    files = load_project_files()
+    project_files_all = [f for f in files if f.get("project_id") == project_id]
+    files_to_parse = [f for f in project_files_all if f.get("parse_status") != "done"]
+
+    parsed_count = 0
+    parse_errors = []
+    if files_to_parse:
+        import sys as _sys_parse
+        _sys_parse.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        from backend.doc_parser import parse_file
+
+        for f in files_to_parse:
+            result = parse_file(f["storage_path"], f["file_type"])
+            for i, file_rec in enumerate(files):
+                if file_rec["id"] == f["id"]:
+                    if result.get("error"):
+                        files[i]["parse_status"] = "failed"
+                        files[i]["parse_error"] = result["error"]
+                        parse_errors.append(f"{f['original_name']}: {result['error']}")
+                    else:
+                        files[i]["parse_status"] = "done"
+                        files[i]["page_count"] = result.get("page_count", 0)
+                        files[i]["parsed_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                        parsed_count += 1
+                        # 保存解析结果
+                        parsed_dir = os.path.join(PARSED_DIR, project_id)
+                        os.makedirs(parsed_dir, exist_ok=True)
+                        parsed_file = os.path.join(parsed_dir, f"{f['id']}.json")
+                        with open(parsed_file, "w", encoding="utf-8") as pf:
+                            json.dump(result, pf, ensure_ascii=False, indent=2)
+                    break
+
+        save_project_files(files)
+
+    # Step 2: AI 提取字段和风险
+    parsed_files = [f for f in files if f.get("project_id") == project_id and f.get("parse_status") == "done"]
+
+    if not parsed_files:
+        return jsonify({
+            "success": False,
+            "message": "没有可解析的文件，无法进行 AI 分析",
+            "parse_result": {"parsed_count": parsed_count, "total_count": len(project_files_all), "errors": parse_errors}
+        }), 400
+
+    # 更新项目状态为分析中
+    for i, p in enumerate(projects):
+        if p["id"] == project_id:
+            projects[i]["status"] = "analyzing"
+            break
+    save_projects(projects)
+
+    # 合并文本并调用 AI
+    all_text_parts = []
+    for f in parsed_files:
+        parsed_file = os.path.join(PARSED_DIR, project_id, f"{f['id']}.json")
+        if os.path.exists(parsed_file):
+            with open(parsed_file, "r", encoding="utf-8") as pf:
+                parsed_data = json.load(pf)
+                if parsed_data.get("text"):
+                    all_text_parts.append(f"【文件：{f['original_name']}】\n{parsed_data['text']}")
+
+    if not all_text_parts:
+        return jsonify({
+            "success": False,
+            "message": "解析内容为空",
+        }), 400
+
+    combined_text = "\n\n".join(all_text_parts)
+
+    import sys as _sys_ai
+    _sys_path_backup = _sys_ai.path[:]
+    _sys_ai.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    from backend.ai_extractor import analyze_document_full
+
+    ai_result = analyze_document_full(combined_text, project_id)
+    _sys_ai.path = _sys_path_backup
+
+    # 保存字段结果
+    if ai_result["field_success"]:
+        _update_extracted_fields(project_id, ai_result["fields"], parsed_files[0] if parsed_files else None)
+
+    # 保存风险项
+    if ai_result["risk_success"]:
+        _save_risk_items(project_id, ai_result["risks"], parsed_files[0] if parsed_files else None)
+
+    # 更新项目状态为已完成
+    for i, p in enumerate(projects):
+        if p["id"] == project_id:
+            projects[i]["status"] = "completed"
+            projects[i]["updated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            risks = load_risk_items()
+            project_risks = [r for r in risks if r.get("project_id") == project_id]
+            projects[i]["risk_count"] = len(project_risks)
+            projects[i]["high_risk_count"] = sum(1 for r in project_risks if r.get("severity") == "high")
+            break
+    save_projects(projects)
+
+    return jsonify({
+        "success": True,
+        "parse_result": {
+            "parsed_count": parsed_count,
+            "total_count": len(project_files_all),
+            "errors": parse_errors
+        },
+        "ai_result": {
+            "field_success": ai_result["field_success"],
+            "risk_success": ai_result["risk_success"],
+            "fields_extracted_count": len([v for v in ai_result.get("fields", {}).values() if v]),
+            "risks_found_count": len(ai_result.get("risks", [])),
+            "errors": ai_result.get("errors", [])
+        }
     })

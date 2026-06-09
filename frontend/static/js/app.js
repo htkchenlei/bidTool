@@ -188,16 +188,17 @@ createApp({
     const projectFiles = ref([]);
     const currentProjectFields = ref([]);
     const currentProjectRisks = ref([]);
-    const projectTab = ref('files');
+    const projectTab = ref('fields');
     const projectSearchKeyword = ref('');
     const showNewProject = ref(false);
     const newProject = reactive({
-      name: '', announcement_url: '',
-      fetchingUrl: false, creating: false
+      announcement_url: '',
+      creating: false
     });
     const newProjectFiles = ref([]);
     const newProjectUploadDragover = ref(false);
     const newProjectFilesInput = ref(null);
+    const analyzingProjects = reactive({});
     const extracting = ref(false);
     const editingField = ref(null);
     const fieldEditValue = ref('');
@@ -222,9 +223,7 @@ createApp({
     // 取消新建项目：重置全部状态
     const cancelNewProject = () => {
       showNewProject.value = false;
-      newProject.name = '';
       newProject.announcement_url = '';
-      newProject.fetchingUrl = false;
       newProject.creating = false;
       newProjectFiles.value = [];
     };
@@ -249,43 +248,6 @@ createApp({
         console.error('删除项目失败:', e);
         alert('删除项目失败');
       }
-    };
-
-    // 抓取网页公告
-    const fetchAnnouncementUrl = async () => {
-      if (!newProject.announcement_url) return;
-      newProject.fetchingUrl = true;
-      console.log('[抓取公告] 请求URL:', newProject.announcement_url);
-      try {
-        const res = await fetch('/api/projects/fetch-url', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ url: newProject.announcement_url })
-        });
-        const data = await res.json();
-        console.log('[抓取公告] 后端返回:', data);
-        console.log('[抓取公告] 匹配到的正则:', data.matched_pattern || '(无匹配)');
-        console.log('[抓取公告] 匹配来源:', data.matched_source || '(无)');
-        console.log('[抓取公告] 原始匹配行:', data.matched_raw_line || '(无)');
-        console.log('[抓取公告] 内容区来源:', data.content_source || '(无)');
-        console.log('[抓取公告] 提取的项目名称:', data.title);
-        console.log('[抓取公告] 内容区含"项目名称"的行:', data.lines_with_project_name_in_content || []);
-        console.log('[抓取公告] 整页含"项目名称"的行:', data.lines_with_project_name_in_all_text || []);
-        if (data.fallback_from_html_title) {
-          console.log('[抓取公告] 使用HTML <title> 作为兜底:', data.fallback_from_html_title);
-        }
-        if (data.success) {
-          if (data.title) {
-            newProject.name = data.title;
-          }
-        } else {
-          alert(data.message || '抓取失败');
-        }
-      } catch (e) {
-        console.error('抓取网页失败:', e);
-        alert('抓取网页失败');
-      }
-      newProject.fetchingUrl = false;
     };
 
     // 处理文件拖放
@@ -321,67 +283,57 @@ createApp({
       newProjectFiles.value.splice(idx, 1);
     };
 
-    // 创建项目并分析
-    const createProjectAndAnalyze = async () => {
+    // 创建项目（后端会自动抓取公告并上传文件）
+    const createProject = async () => {
       if (!newProject.announcement_url) return;
-      if (newProjectFiles.value.length === 0) return;
-
       newProject.creating = true;
       try {
-        // 1. 创建项目
-        const res = await fetch('/api/projects', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            name: newProject.name || '未命名项目',
-            announcement_url: newProject.announcement_url
-          }),
-        });
-        const data = await res.json();
+        const form = new FormData();
+        form.append('url', newProject.announcement_url);
+        for (const file of newProjectFiles.value) {
+          form.append('files', file);
+        }
+        const res = await fetch('/api/projects', { method: 'POST', body: form });
+        const text = await res.text();
+        let data;
+        try { data = JSON.parse(text); } catch { alert('服务器返回异常，请刷新页面重试'); return; }
         if (!data.success) {
-          newProject.creating = false;
+          alert(data.message || '创建失败');
           return;
         }
-
-        const projectId = data.project.id;
-
-        // 2. 上传文件
-        for (const file of newProjectFiles.value) {
-          const form = new FormData();
-          form.append('file', file);
-          try {
-            await fetch(`/api/projects/${projectId}/files`, { method: 'POST', body: form });
-          } catch (e) {
-            console.error('上传文件失败:', file.name, e);
-          }
-        }
-
-        // 3. 关闭弹窗并重置
         showNewProject.value = false;
-        Object.assign(newProject, {
-          name: '', announcement_url: '',
-          fetchingUrl: false, creating: false
-        });
+        newProject.announcement_url = '';
+        newProject.creating = false;
         newProjectFiles.value = [];
-
-        // 4. 刷新列表并打开项目
         await loadProjects();
-        await openProject(projectId);
-
-        // 5. 自动开始解析
-        try {
-          await fetch(`/api/projects/${projectId}/parse-all`, { method: 'POST' });
-        } catch (e) {
-          console.error('解析失败:', e);
-        }
-
-        // 6. 刷新项目数据
-        await openProject(projectId);
-
       } catch (e) {
         console.error('创建项目失败:', e);
+        alert('创建项目失败：' + (e.message || e));
+      } finally {
+        newProject.creating = false;
       }
-      newProject.creating = false;
+    };
+
+    // 开始分析：解析文件并调用 AI 提取
+    const analyzeProject = async (projectId) => {
+      analyzingProjects[projectId] = true;
+      try {
+        const res = await fetch(`/api/projects/${projectId}/analyze`, { method: 'POST' });
+        const text = await res.text();
+        let data;
+        try { data = JSON.parse(text); }
+        catch { alert('服务器返回异常，请刷新页面后重试'); return; }
+        if (!data.success) {
+          alert(data.message || '分析失败');
+        } else {
+          await loadProjects();
+        }
+      } catch (e) {
+        console.error('分析失败:', e);
+        alert('分析失败：' + (e.message || e));
+      } finally {
+        analyzingProjects[projectId] = false;
+      }
     };
 
     const openProject = async (projectId) => {
@@ -393,7 +345,7 @@ createApp({
           projectFiles.value = data.files || [];
           currentProjectFields.value = data.fields || [];
           currentProjectRisks.value = data.risks || [];
-          projectTab.value = 'files';
+          projectTab.value = 'fields';
         }
       } catch {}
     };
@@ -489,6 +441,22 @@ createApp({
       } catch {}
     };
 
+    const copyFieldValue = async (field) => {
+      const value = field.machine_value || '';
+      try {
+        await navigator.clipboard.writeText(value);
+      } catch {
+        const ta = document.createElement('textarea');
+        ta.value = value;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        try { document.execCommand('copy'); } catch {}
+        document.body.removeChild(ta);
+      }
+    };
+
     const confirmRisk = async (risk) => {
       try {
         await fetch(`/api/projects/${currentProject.value.id}/risks/${risk.id}`, {
@@ -552,7 +520,7 @@ createApp({
     });
 
     const getProjectStatusLabel = (status) => {
-      const map = { pending: '待处理', parsing: '解析中', parsed: '已解析', extracting: 'AI分析中', reviewing: '复核中', completed: '已完成' };
+      const map = { pending: '待分析', analyzing: '分析中', completed: '已完成', parsing: '解析中', parsed: '已解析', extracting: 'AI分析中', reviewing: '复核中' };
       return map[status] || status;
     };
 
@@ -1187,11 +1155,11 @@ createApp({
       editingField, fieldEditValue,
       newProjectFiles, newProjectFilesInput, newProjectUploadDragover,
       loadProjects, openProject, closeProject, deleteProject, cancelNewProject,
-      fetchAnnouncementUrl, handleNewProjectFileDrop, handleNewProjectFileSelect,
-      removeNewProjectFile, formatFileSize, createProjectAndAnalyze,
+      handleNewProjectFileDrop, handleNewProjectFileSelect,
+      removeNewProjectFile, formatFileSize, createProject, analyzeProject, analyzingProjects,
       uploadProjectFiles, loadProjectFiles, parseProjectFile, parseAllProjectFiles,
       extractProjectInfo, deleteProjectFile, downloadProjectFile,
-      startEditField, saveFieldReview, confirmRisk, ignoreRisk,
+      startEditField, saveFieldReview, copyFieldValue, confirmRisk, ignoreRisk,
       exportProjectFields, exportProjectRisks,
       fieldReviewStats, riskReviewStats, riskStats,
       getProjectStatusLabel, getParseStatusLabel, getFieldReviewLabel,

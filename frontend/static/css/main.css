@@ -670,6 +670,7 @@ html, body {
 
 .btn--full  { width: 100%; justify-content: center; }
 .btn--lg    { padding: var(--sp-3) var(--sp-6); font-size: 14px; }
+.btn--sm    { padding: 6px 12px; font-size: 12px; }
 
 .icon-btn {
   display: inline-flex;
@@ -2686,6 +2687,11 @@ html, body {
   color: oklch(60% 0.16 55);
 }
 
+.project-status--analyzing {
+  background: var(--mac-sky-light);
+  color: oklch(50% 0.15 230);
+}
+
 .project-status--parsing {
   background: var(--mac-sky-light);
   color: oklch(50% 0.15 230);
@@ -3022,6 +3028,87 @@ html, body {
 
 .fields-table tbody tr:hover {
   background: var(--gray-50);
+}
+
+.field-cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--sp-4);
+}
+
+@media (max-width: 1024px) {
+  .field-cards {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .field-cards {
+    grid-template-columns: 1fr;
+  }
+}
+
+.field-card {
+  background: #fff;
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-md);
+  padding: var(--sp-4);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  transition: box-shadow 0.15s, transform 0.15s;
+}
+
+.field-card:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.field-card-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--gray-500);
+  margin-bottom: var(--sp-2);
+  letter-spacing: 0.3px;
+}
+
+.field-card-value-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+}
+
+.field-card-value {
+  flex: 1;
+  font-size: 14px;
+  color: var(--gray-800);
+  font-weight: 500;
+  word-break: break-word;
+  line-height: 1.6;
+}
+
+.field-card-edit {
+  flex: 1;
+}
+
+.field-card-input {
+  width: 100%;
+  padding: 8px 12px;
+  font-size: 14px;
+  border: 1px solid var(--gray-300);
+  border-radius: var(--radius-sm);
+  color: var(--gray-800);
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.field-card-input:focus {
+  border-color: var(--mac-blue);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+}
+
+.field-card-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
 }
 
 .field-group-header {

@@ -12,7 +12,7 @@ env/
 .env
 
 # Data & uploads
-data/*.json
+data/
 uploads/
 backend/uploads/
 

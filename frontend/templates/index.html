@@ -310,30 +310,15 @@
             <table class="bidding-table">
               <thead>
                 <tr>
-                  <th style="width: 25%">项目名称</th>
-                  <th style="width: 12%">项目编号</th>
-                  <th style="width: 12%">招标人</th>
-                  <th style="width: 12%">预算金额</th>
-                  <th style="width: 12%">投标截止</th>
-                  <th style="width: 6%">风险</th>
-                  <th style="width: 7%">状态</th>
-                  <th style="width: 8%">操作</th>
+                  <th style="width: 40%">项目名称</th>
+                  <th style="width: 10%">状态</th>
+                  <th style="width: 40%">操作</th>
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="proj in projects" :key="proj.id" @click="openProject(proj.id)" class="bidding-row">
+                <tr v-for="proj in projects" :key="proj.id" class="bidding-row">
                   <td>
                     <div class="bidding-title">{{ proj.name }}</div>
-                  </td>
-                  <td>{{ proj.project_no || '—' }}</td>
-                  <td>{{ proj.purchaser || '—' }}</td>
-                  <td>{{ proj.budget_amount || '—' }}</td>
-                  <td>{{ proj.bid_deadline || '—' }}</td>
-                  <td>
-                    <span v-if="proj.risk_count" class="risk-badge" :class="{'risk-badge--high': proj.high_risk_count > 0}">
-                      {{ proj.risk_count }} 项
-                    </span>
-                    <span v-else>—</span>
                   </td>
                   <td>
                     <span class="project-status" :class="'project-status--' + proj.status">
@@ -341,13 +326,19 @@
                     </span>
                   </td>
                   <td>
-                    <div style="display:flex;gap:6px;align-items:center;justify-content:flex-end">
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" class="bidding-arrow"><path d="M9 18l6-6-6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                      <button class="icon-btn icon-btn--danger" @click.stop="deleteProject(proj.id, $event)" title="删除" style="padding:4px">
+                    <div style="display:flex;gap:8px;align-items:center;justify-content:flex-start">
+                      <button v-if="proj.status !== 'completed'" class="btn btn--primary btn--sm" @click.stop="analyzeProject(proj.id)" :disabled="analyzingProjects[proj.id]">
+                        <svg v-if="analyzingProjects[proj.id]" class="spinner" width="12" height="12" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2" stroke-dasharray="31.4 31.4" stroke-linecap="round"/></svg>
+                        <span v-else>开始分析</span>
+                      </button>
+                      <button v-if="proj.status === 'completed'" class="btn btn--outline btn--sm" @click.stop="openProject(proj.id)">
+                        查看结果
+                      </button>
+                      <button class="icon-btn icon-btn--danger" @click.stop="deleteProject(proj.id)" title="删除" style="padding:4px;margin-left:auto">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-                          <polyline points="3,6 5,6 21,6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                          <polyline points="3,6 5,6 21,6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                           <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                          <path d="M10 11v6M14 11v6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                          <path d="M10 11v6M14 11v6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                           <path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                         </svg>
                       </button>
@@ -388,125 +379,34 @@
 
           <!-- 项目详情标签页 -->
           <div class="project-tabs">
-            <button class="project-tab" :class="{'project-tab--active': projectTab === 'files'}" @click="projectTab = 'files'">文件管理</button>
             <button class="project-tab" :class="{'project-tab--active': projectTab === 'fields'}" @click="projectTab = 'fields'">字段复核</button>
             <button class="project-tab" :class="{'project-tab--active': projectTab === 'risks'}" @click="projectTab = 'risks'">风险清单</button>
-          </div>
-
-          <!-- 文件管理标签 -->
-          <div v-if="projectTab === 'files'" class="project-tab-content">
-            <div class="toolbar">
-              <div class="toolbar-left">
-                <label class="btn btn--primary" style="cursor:pointer">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><polyline points="17,8 12,3 7,8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><line x1="12" y1="3" x2="12" y2="15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-                  上传文件
-                  <input type="file" multiple style="display:none" @change="uploadProjectFiles" />
-                </label>
-                <button class="btn btn--outline" @click="parseAllProjectFiles" :disabled="!projectFiles.filter(f => f.parse_status !== 'done').length">
-                  解析全部文件
-                </button>
-                <button class="btn btn--primary" @click="extractProjectInfo" :disabled="!projectFiles.filter(f => f.parse_status === 'done').length || extracting">
-                  {{ extracting ? 'AI 分析中...' : 'AI 提取信息' }}
-                </button>
-              </div>
-            </div>
-
-            <div v-if="projectFiles.length === 0" class="empty-state">
-              <p>暂无文件，上传招标文件开始分析</p>
-            </div>
-            <div v-else class="file-table-wrap">
-              <table class="file-table">
-                <thead>
-                  <tr>
-                    <th>文件名</th>
-                    <th>类型</th>
-                    <th>大小</th>
-                    <th>解析状态</th>
-                    <th>上传时间</th>
-                    <th>操作</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="file in projectFiles" :key="file.id">
-                    <td>
-                      <div class="file-name-cell">
-                        <span class="file-icon">{{ getFileEmoji(file.file_type) }}</span>
-                        <span>{{ file.original_name }}</span>
-                      </div>
-                    </td>
-                    <td><span class="type-badge">{{ file.file_type }}</span></td>
-                    <td>{{ formatSize(file.file_size) }}</td>
-                    <td>
-                      <span class="parse-status" :class="'parse-status--' + file.parse_status">
-                        {{ getParseStatusLabel(file.parse_status) }}
-                      </span>
-                    </td>
-                    <td>{{ file.uploaded_at }}</td>
-                    <td>
-                      <button class="icon-btn icon-btn--primary" @click="downloadProjectFile(file)" title="下载">
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><polyline points="7,10 12,15 17,10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><line x1="12" y1="15" x2="12" y2="3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-                      </button>
-                      <button class="icon-btn" @click="parseProjectFile(file)" :disabled="file.parse_status === 'done'" title="解析">
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><polyline points="22,12 18,12 15,21 9,3 6,12 2,12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                      </button>
-                      <button class="icon-btn icon-btn--danger" @click="deleteProjectFile(file)" title="删除">
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><polyline points="3,6 5,6 21,6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                      </button>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
           </div>
 
           <!-- 字段复核标签 -->
           <div v-if="projectTab === 'fields'" class="project-tab-content">
             <div class="field-review-stats">
               <span>共 {{ currentProjectFields.length }} 个字段</span>
-              <span>待复核: {{ fieldReviewStats.pending }}</span>
-              <span>已确认: {{ fieldReviewStats.confirmed }}</span>
             </div>
             <div v-if="currentProjectFields.length === 0" class="empty-state">
               <p>暂无字段数据，请先上传文件并执行 AI 提取</p>
             </div>
-            <div v-else class="fields-table-wrap">
-              <table class="fields-table">
-                <thead>
-                  <tr>
-                    <th style="width: 15%">字段名称</th>
-                    <th style="width: 20%">机器提取值</th>
-                    <th style="width: 20%">人工确认值</th>
-                    <th style="width: 15%">来源文件</th>
-                    <th style="width: 10%">置信度</th>
-                    <th style="width: 10%">状态</th>
-                    <th style="width: 10%">操作</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="field in currentProjectFields" :key="field.id">
-                    <td><strong>{{ field.field_label }}</strong></td>
-                    <td>{{ field.machine_value || '—' }}</td>
-                    <td>
-                      <input v-if="editingField === field.id" class="table-input" v-model="fieldEditValue" @keyup.enter="saveFieldReview(field)" @keyup.esc="editingField = null" />
-                      <span v-else>{{ field.confirmed_value || '—' }}</span>
-                    </td>
-                    <td>{{ field.source_file_name || '—' }}</td>
-                    <td>{{ field.confidence ? (field.confidence * 100).toFixed(0) + '%' : '—' }}</td>
-                    <td>
-                      <span class="review-status" :class="'review-status--' + field.review_status">
-                        {{ getFieldReviewLabel(field.review_status) }}
-                      </span>
-                    </td>
-                    <td>
-                      <button v-if="editingField !== field.id" class="btn btn--sm btn--outline" @click="startEditField(field)">编辑</button>
-                      <template v-else>
-                        <button class="btn btn--sm btn--primary" @click="saveFieldReview(field)">保存</button>
-                        <button class="btn btn--sm btn--ghost" @click="editingField = null">取消</button>
-                      </template>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
+            <div v-else class="field-cards">
+              <div v-for="field in currentProjectFields" :key="field.id" class="field-card">
+                <div class="field-card-label">{{ field.field_label }}</div>
+                <div class="field-card-value-row">
+                  <div v-if="editingField === field.id" class="field-card-edit">
+                    <input class="field-card-input" v-model="fieldEditValue" @keyup.enter="saveFieldReview(field)" @keyup.esc="editingField = null" />
+                  </div>
+                  <div v-else class="field-card-value">{{ field.machine_value || '—' }}</div>
+                  <div class="field-card-actions">
+                    <button v-if="editingField === field.id" class="btn btn--sm btn--primary" @click="saveFieldReview(field)">保存</button>
+                    <button v-if="editingField === field.id" class="btn btn--sm btn--ghost" @click="editingField = null">取消</button>
+                    <button v-if="editingField !== field.id" class="btn btn--sm btn--outline" @click="startEditField(field)">编辑</button>
+                    <button class="btn btn--sm btn--ghost" @click="copyFieldValue(field)" title="复制到剪贴板">复制</button>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -1301,19 +1201,7 @@
           <!-- 公告网页链接 -->
           <div class="form-group">
             <label class="form-label">公告网页链接 <span style="color:#e5484d">*</span></label>
-            <div style="display:flex;gap:8px">
-              <input type="url" class="form-input form-input--lg" v-model="newProject.announcement_url" placeholder="输入公告网页链接，如：https://..." style="flex:1" />
-              <button class="btn btn--primary" @click="fetchAnnouncementUrl" :disabled="!newProject.announcement_url || newProject.fetchingUrl">
-                <svg v-if="newProject.fetchingUrl" class="spinner" width="14" height="14" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2" stroke-dasharray="31.4 31.4" stroke-linecap="round"/></svg>
-                <span v-else>抓取</span>
-              </button>
-            </div>
-          </div>
-
-          <!-- 项目名称（自动提取） -->
-          <div class="form-group">
-            <label class="form-label">项目名称</label>
-            <input type="text" class="form-input" v-model="newProject.name" placeholder="抓取公告后自动填充，也可手动修改" />
+            <input type="url" class="form-input form-input--lg" v-model="newProject.announcement_url" placeholder="输入公告网页链接，如：https://www.ccgp.gov.cn/..." />
           </div>
 
           <!-- 上传招标文件 -->
@@ -1352,21 +1240,21 @@
 
           <!-- 提示信息 -->
           <div style="background:var(--mac-sky-light);border-radius:var(--radius-md);padding:var(--sp-3);margin-top:var(--sp-2)">
-            <p style="font-size:12px;color:oklch(50% 0.15 230);margin:0;display:flex;align-items:flex-start;gap:6px">
+            <p style="font-size:12px;color:var(--mac-blue);margin:0;display:flex;align-items:flex-start;gap:6px">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style="flex-shrink:0;margin-top:2px">
                 <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="1.8"/>
                 <line x1="12" y1="16" x2="12" y2="12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
                 <circle cx="12" cy="8" r="1" fill="currentColor"/>
               </svg>
-              系统将自动从公告和招标文件中提取项目编号、预算金额、招标人、代理机构等信息，请在分析完成后进行复核确认。
+              系统将自动从公告中提取项目名称，创建项目后可点击"开始分析"进一步提取项目编号、预算、招标人等信息。
             </p>
           </div>
         </div>
         <div class="modal-footer">
           <button class="btn btn--ghost" @click="cancelNewProject">取消</button>
-          <button class="btn btn--primary" @click="createProjectAndAnalyze" :disabled="!newProject.announcement_url || newProjectFiles.length === 0 || newProject.creating">
+          <button class="btn btn--primary" @click="createProject" :disabled="!newProject.announcement_url || newProject.creating">
             <svg v-if="newProject.creating" class="spinner" width="14" height="14" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2" stroke-dasharray="31.4 31.4" stroke-linecap="round"/></svg>
-            <span v-else>创建并分析</span>
+            <span v-else>创建</span>
           </button>
         </div>
       </div>
