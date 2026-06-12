@@ -1075,6 +1075,118 @@ createApp({
     const testingModel = ref(null);
     const testResults = reactive({});
 
+    // 新建模型模态框
+    const showNewModelModal = ref(false);
+    const newModelForm = reactive({
+      name: '',
+      api_key: '',
+      base_url: '',
+      model: '',
+      supports_vision: false,
+    });
+    const newModelTesting = ref(false);
+    const newModelTestResult = ref(null); // { ok: bool, msg: string }
+    const newModelCreating = ref(false);
+    const newModelShowKey = ref(false);
+
+    const resetNewModelForm = () => {
+      newModelForm.name = '';
+      newModelForm.api_key = '';
+      newModelForm.base_url = '';
+      newModelForm.model = '';
+      newModelForm.supports_vision = false;
+      newModelTestResult.value = null;
+      newModelShowKey.value = false;
+    };
+
+    const openNewModelModal = () => {
+      resetNewModelForm();
+      showNewModelModal.value = true;
+    };
+
+    const testNewModel = async () => {
+      if (!newModelForm.api_key || !newModelForm.base_url || !newModelForm.model) {
+        newModelTestResult.value = { ok: false, msg: '请填写完整的 API Key / Base URL / 模型名称' };
+        return;
+      }
+      newModelTesting.value = true;
+      newModelTestResult.value = null;
+      try {
+        const res = await fetch('/api/settings/test-model', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            api_key: newModelForm.api_key,
+            base_url: newModelForm.base_url,
+            model: newModelForm.model,
+          }),
+        });
+        const data = await res.json();
+        newModelTestResult.value = { ok: data.success, msg: data.message };
+      } catch (e) {
+        newModelTestResult.value = { ok: false, msg: '网络请求失败，请检查后端服务是否运行' };
+      }
+      newModelTesting.value = false;
+    };
+
+    const createModel = async () => {
+      if (!newModelForm.name || !newModelForm.api_key || !newModelForm.base_url || !newModelForm.model) {
+        newModelTestResult.value = { ok: false, msg: '请填写完整的信息' };
+        return;
+      }
+      // 要求先测试连接
+      if (!newModelTestResult.value || !newModelTestResult.value.ok) {
+        newModelTestResult.value = { ok: false, msg: '请先测试连接成功后再创建' };
+        return;
+      }
+      newModelCreating.value = true;
+      try {
+        const res = await fetch('/api/settings/models', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: newModelForm.name,
+            api_key: newModelForm.api_key,
+            base_url: newModelForm.base_url,
+            model: newModelForm.model,
+            supports_vision: newModelForm.supports_vision,
+          }),
+        });
+        const data = await res.json();
+        if (data.success) {
+          toastVisible.value = true;
+          setTimeout(() => { toastVisible.value = false; }, 2800);
+          showNewModelModal.value = false;
+          await loadConfig();
+        } else {
+          newModelTestResult.value = { ok: false, msg: data.message || '创建失败' };
+        }
+      } catch (e) {
+        newModelTestResult.value = { ok: false, msg: '网络请求失败，请检查后端服务是否运行' };
+      }
+      newModelCreating.value = false;
+    };
+
+    const deleteModel = async (model) => {
+      if (!model.is_custom && model.id !== 'custom') {
+        return;
+      }
+      if (!confirm(`确认删除「${model.name}」？`)) return;
+      try {
+        const res = await fetch(`/api/settings/models/${encodeURIComponent(model.id)}`, {
+          method: 'DELETE',
+        });
+        const data = await res.json();
+        if (data.success) {
+          toastVisible.value = true;
+          setTimeout(() => { toastVisible.value = false; }, 2800);
+          await loadConfig();
+        } else {
+          alert(data.message || '删除失败');
+        }
+      } catch {}
+    };
+
     const loadConfig = async () => {
       try {
         const res = await fetch('/api/config');
@@ -1082,6 +1194,7 @@ createApp({
         modelConfigs.value = (data.models || []).map(m => ({
           ...m,
           supports_vision: m.supports_vision !== undefined ? m.supports_vision : false,
+          is_custom: m.is_custom || m.id === 'custom',
         }));
         activeModel.value = data.active_model || '';
         const keys = {};
@@ -1114,11 +1227,23 @@ createApp({
     const saveSettings = async () => {
       saving.value = true;
       try {
+        // 构建保存时的 payload — 保留 api_key 的处理：如果用户未显式修改，后端会根据 api_key_masked 保留原值
+        const payload = modelConfigs.value.map(m => ({
+          id: m.id,
+          name: m.name,
+          api_key: m.api_key || '',
+          api_key_masked: m.api_key_masked || '',
+          base_url: m.base_url,
+          model: m.model,
+          enabled: m.enabled,
+          supports_vision: m.supports_vision,
+          is_custom: m.is_custom,
+        }));
         await fetch('/api/config', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            models: modelConfigs.value,
+            models: payload,
             active_model: activeModel.value,
           }),
         });
@@ -1178,6 +1303,9 @@ createApp({
       fileCount, analysisCount, certCount, expiringSoon, expiringSoonCount,
       modelConfigs, activeModel, saving, saveSettings, toastVisible, showKey, toggleKeyVisibility,
       testingModel, testResults, testModel,
+      showNewModelModal, newModelForm, newModelTesting, newModelTestResult, newModelCreating,
+      newModelShowKey,
+      openNewModelModal, resetNewModelForm, testNewModel, createModel, deleteModel,
       setView,
       // 区域查询
       regions, biddingList, biddingTotal, biddingPage, biddingPerPage, biddingTotalPages,

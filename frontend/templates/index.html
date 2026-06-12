@@ -366,14 +366,6 @@
                 </svg>
                 删除项目
               </button>
-              <button class="btn btn--outline" @click="exportProjectFields" :disabled="!currentProjectFields.length">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><polyline points="7,10 12,15 17,10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><line x1="12" y1="15" x2="12" y2="3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-                导出登记本
-              </button>
-              <button class="btn btn--outline" @click="exportProjectRisks" :disabled="!currentProjectRisks.length">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><polyline points="7,10 12,15 17,10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><line x1="12" y1="15" x2="12" y2="3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-                导出风险清单
-              </button>
             </div>
           </div>
 
@@ -1038,26 +1030,50 @@
           <p class="page-subtitle">配置 AI 大模型接入参数，支持多种模型自由切换</p>
         </div>
 
+        <!-- 模型列表 + 新建按钮 -->
+        <div class="settings-toolbar">
+          <h3 class="section-title">已接入模型</h3>
+          <button class="btn btn--primary" @click="openNewModelModal">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+              <line x1="12" y1="5" x2="12" y2="19" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              <line x1="5" y1="12" x2="19" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+            新建自定义模型
+          </button>
+        </div>
+
         <div class="settings-grid">
           <div v-for="model in modelConfigs" :key="model.id" class="model-card"
             :class="{
               'model-card--active': model.enabled,
-              'model-card--custom': model.id === 'custom'
+              'model-card--custom': model.is_custom,
             }">
             <div class="model-card-header">
               <div class="model-identity">
-                <div class="model-avatar" :class="'avatar--' + model.id">
+                <div class="model-avatar" :class="model.is_custom ? 'avatar--custom' : ('avatar--' + model.id)">
                   {{ model.name.charAt(0) }}
                 </div>
                 <div>
-                  <div class="model-name">{{ model.name }}</div>
+                  <div class="model-name">
+                    {{ model.name }}
+                    <span v-if="model.is_custom" class="custom-badge">自定义</span>
+                  </div>
                   <div class="model-model">{{ model.model || '待配置' }}</div>
                 </div>
               </div>
-              <label class="toggle">
-                <input type="checkbox" v-model="model.enabled" />
-                <span class="toggle-track"></span>
-              </label>
+              <div style="display:flex;gap:8px;align-items:center;">
+                <label class="toggle">
+                  <input type="checkbox" v-model="model.enabled" />
+                  <span class="toggle-track"></span>
+                </label>
+                <button v-if="model.is_custom" class="icon-btn icon-btn--danger icon-btn--sm"
+                  @click="deleteModel(model)" title="删除">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+                    <polyline points="3,6 5,6 21,6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                    <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                  </svg>
+                </button>
+              </div>
             </div>
             <div class="model-form">
               <div class="form-group">
@@ -1077,11 +1093,11 @@
               </div>
               <div class="form-group">
                 <label class="form-label">API Base URL</label>
-                <input type="text" class="form-input" v-model="model.base_url" :placeholder="model.id === 'custom' ? '请输入 API 地址' : ''" />
+                <input type="text" class="form-input" v-model="model.base_url" placeholder="https://api.example.com/v1" />
               </div>
               <div class="form-group">
                 <label class="form-label">模型名称</label>
-                <input type="text" class="form-input" v-model="model.model" :placeholder="model.id === 'custom' ? '请输入模型名称' : ''" />
+                <input type="text" class="form-input" v-model="model.model" placeholder="例如：gpt-4o" />
               </div>
               <!-- 视觉支持开关 + 测试连接 -->
               <div class="model-form-row">
@@ -1097,7 +1113,7 @@
                 </label>
                 <button class="btn btn--test"
                   @click="testModel(model)"
-                  :disabled="testingModel === model.id || !model.enabled || !model.api_key">
+                  :disabled="testingModel === model.id || !model.api_key">
                   <svg v-if="testingModel === model.id" class="spinner" width="12" height="12" viewBox="0 0 24 24" fill="none">
                     <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" opacity="0.25"/>
                     <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
@@ -1137,6 +1153,92 @@
           <div v-if="toastVisible" class="toast">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><polyline points="20,6 9,17 4,12" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
             配置已保存
+          </div>
+        </Transition>
+
+        <!-- 新建自定义模型模态框 -->
+        <Transition name="fade">
+          <div v-if="showNewModelModal" class="modal-overlay" @click.self="showNewModelModal = false">
+            <div class="modal" style="width: 520px;">
+              <div class="modal-header">
+                <h3>新建自定义模型</h3>
+                <button class="modal-close" @click="showNewModelModal = false">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                    <line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                    <line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                  </svg>
+                </button>
+              </div>
+              <div class="modal-body">
+                <div class="form-group">
+                  <label class="form-label">显示名称 <span style="color:#e5484d;">*</span></label>
+                  <input type="text" class="form-input form-input--lg" v-model="newModelForm.name"
+                    placeholder="例如：我的私有 LLM" @keyup.enter="testNewModel" />
+                </div>
+                <div class="form-group">
+                  <label class="form-label">API Key <span style="color:#e5484d;">*</span></label>
+                  <div class="input-with-toggle">
+                    <input :type="newModelShowKey ? 'text' : 'password'" class="form-input"
+                      v-model="newModelForm.api_key" placeholder="请输入 API Key" />
+                    <button class="eye-btn" @click="newModelShowKey = !newModelShowKey">
+                      <svg v-if="!newModelShowKey" width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/></svg>
+                      <svg v-else width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="1" y1="1" x2="23" y2="23" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                    </button>
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">API Base URL <span style="color:#e5484d;">*</span></label>
+                  <input type="text" class="form-input" v-model="newModelForm.base_url"
+                    placeholder="例如：https://api.openai.com/v1 或 https://ark.cn-beijing.volces.com/api/v3" />
+                </div>
+                <div class="form-group">
+                  <label class="form-label">模型名称（模型 ID）<span style="color:#e5484d;">*</span></label>
+                  <input type="text" class="form-input" v-model="newModelForm.model"
+                    placeholder="例如：gpt-4o-mini、doubao-1-5-pro-32k、qwen-plus" />
+                </div>
+                <div class="form-group">
+                  <label class="model-vision-toggle" style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+                    <span class="model-vision-label">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/></svg>
+                      支持视觉识别
+                    </span>
+                    <label class="toggle toggle--sm">
+                      <input type="checkbox" v-model="newModelForm.supports_vision" />
+                      <span class="toggle-track"></span>
+                    </label>
+                  </label>
+                </div>
+                <!-- 测试连接按钮 + 结果 -->
+                <div class="model-test-row">
+                  <button class="btn btn--test btn--lg" @click="testNewModel"
+                    :disabled="newModelTesting">
+                    <svg v-if="newModelTesting" class="spinner" width="12" height="12" viewBox="0 0 24 24" fill="none">
+                      <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" opacity="0.25"/>
+                      <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+                    </svg>
+                    <svg v-else width="12" height="12" viewBox="0 0 24 24" fill="none"><polyline points="22,12 18,12 15,21 9,3 6,12 2,12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    {{ newModelTesting ? '测试中…' : '测试连接' }}
+                  </button>
+                </div>
+                <div v-if="newModelTestResult" class="test-result"
+                  :class="{ 'test-result--ok': newModelTestResult.ok, 'test-result--fail': !newModelTestResult.ok }">
+                  <svg v-if="newModelTestResult.ok" width="14" height="14" viewBox="0 0 24 24" fill="none"><polyline points="20,6 9,17 4,12" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  <svg v-else width="14" height="14" viewBox="0 0 24 24" fill="none"><line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/><line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg>
+                  <span>{{ newModelTestResult.msg }}</span>
+                </div>
+              </div>
+              <div class="modal-footer">
+                <button class="btn btn--outline" @click="showNewModelModal = false">取消</button>
+                <button class="btn btn--primary" @click="createModel"
+                  :disabled="newModelCreating || !newModelTestResult || !newModelTestResult.ok">
+                  <svg v-if="newModelCreating" class="spinner" width="12" height="12" viewBox="0 0 24 24" fill="none">
+                    <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" opacity="0.25"/>
+                    <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+                  </svg>
+                  {{ newModelCreating ? '创建中…' : '创建' }}
+                </button>
+              </div>
+            </div>
           </div>
         </Transition>
       </div>

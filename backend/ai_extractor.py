@@ -10,7 +10,7 @@ from datetime import datetime
 # 导入 LLM 客户端
 import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from backend.llm_client import call_llm, get_active_model_config
+from backend.llm_client import call_llm, get_active_model_config, get_all_enabled_model_configs
 
 
 # 字段提取 Prompt 模板
@@ -22,28 +22,32 @@ FIELD_EXTRACTION_PROMPT = """你是一个专业的招标文件信息提取助手
 3. 标段或包号 (section_no)
 4. 招标方式 (bidding_method)
 5. 采购类型 (procurement_type)
-6. 采购内容摘要 (procurement_summary)
-7. 项目地点 (project_location)
-8. 资金来源 (fund_source)
-9. 招标人或采购人 (purchaser)
-10. 招标代理机构 (agency)
-11. 招标人联系人 (purchaser_contact)
-12. 招标人联系电话 (purchaser_phone)
-13. 代理机构联系人 (agency_contact)
-14. 代理机构联系电话 (agency_phone)
-15. 电子邮箱 (email)
-16. 预算金额 (budget_amount)
-17. 最高限价 (max_price)
-18. 投标保证金金额 (bid_bond_amount)
-19. 保证金缴纳方式 (bid_bond_method)
-20. 公告发布时间 (announce_date)
+6. 项目地点 (project_location)
+7. 招标人或采购人 (purchaser)
+8. 招标代理机构 (agency)
+9. 招标人联系人 (purchaser_contact)
+10. 招标人联系电话 (purchaser_phone)
+11. 代理机构联系人 (agency_contact)
+12. 代理机构联系电话 (agency_phone)
+13. 电子邮箱 (email)
+14. 预算金额 (budget_amount)
+15. 最高限价 (max_price)
+16. 招标控制价 (control_price)
+17. 投标保证金金额 (bid_bond_amount)
+18. 履约保证金 (performance_bond)
+19. 公告发布时间 (announce_date)
+20. 报名开始时间 (register_start)
 21. 报名截止时间 (register_end)
-22. 招标文件获取截止时间 (doc_get_end)
-23. 答疑或澄清截止时间 (clarify_end)
+22. 答疑或澄清截止时间 (clarify_end)
+23. 保证金缴纳截止时间 (bond_deadline)
 24. 投标截止时间 (bid_deadline)
 25. 开标时间 (opening_time)
 26. 报名地点或平台 (register_location)
-27. 开标地点或平台 (opening_location)
+27. 文件获取地点或平台 (doc_get_location)
+28. 投标文件递交地点或平台 (submit_location)
+29. 开标地点或平台 (opening_location)
+30. 系统建设内容 (system_content)
+31. 软件功能模块 (software_modules)
 
 请以严格的 JSON 格式返回，格式如下：
 {
@@ -165,17 +169,53 @@ def _extract_key_sections(text, max_chars=60000):
     return combined.strip()
 
 
+def _call_llm_with_fallback(messages, temperature=0.1, max_tokens=1000):
+    """
+    调用 LLM，如果激活模型失败则自动回退到其他已启用的模型
+    返回: (response_text: str, used_model_name: str)
+    """
+    all_models = get_all_enabled_model_configs()
+    if not all_models:
+        raise RuntimeError("未配置或启用任何大模型，请先在设置中配置并启用一个模型")
+
+    last_error = None
+    for cfg in all_models:
+        try:
+            # 临时替换当前使用的模型配置
+            import backend.llm_client as llm_mod
+            original_get = llm_mod.get_active_model_config
+            llm_mod.get_active_model_config = lambda: cfg
+
+            response = call_llm(messages, temperature=temperature, max_tokens=max_tokens)
+
+            # 恢复原始函数
+            llm_mod.get_active_model_config = original_get
+
+            return response, cfg.get("name", cfg.get("model", "unknown"))
+
+        except Exception as e:
+            last_error = e
+            # 恢复原始函数（防止异常时未恢复）
+            try:
+                import backend.llm_client as llm_mod
+                if 'original_get' in dir():
+                    llm_mod.get_active_model_config = original_get
+            except:
+                pass
+            continue
+
+    raise RuntimeError(
+        f"所有 {len(all_models)} 个已启用模型均调用失败。\n"
+        f"最后一个错误: {last_error}"
+    )
+
+
 def extract_fields_with_ai(text, project_id=None):
     """
-    使用 AI 从文本中提取字段
+    使用 AI 从文本中提取字段（含多模型自动回退）
     返回: {"success": True, "fields": {...}} 或 {"success": False, "message": "..."}
     """
-    # 检查模型配置
-    cfg = get_active_model_config()
-    if not cfg:
-        return {"success": False, "message": "未配置或启用大模型，请先在设置中配置并启用一个模型"}
-
-    # 智能文本选择（原版本只截取前 12000 字符导致关键信息丢失）
+    # 智能文本选择
     processed_text = _extract_key_sections(text, max_chars=60000)
 
     messages = [
@@ -184,13 +224,13 @@ def extract_fields_with_ai(text, project_id=None):
     ]
 
     try:
-        response = call_llm(messages, temperature=0.1, max_tokens=2000)
+        response, model_name = _call_llm_with_fallback(messages, temperature=0.1, max_tokens=4000)
         fields = _parse_json_response(response)
 
         if fields:
             return {"success": True, "fields": fields}
         else:
-            return {"success": False, "message": "AI 返回格式解析失败"}
+            return {"success": False, "message": f"AI ({model_name}) 返回格式解析失败"}
 
     except Exception as e:
         return {"success": False, "message": f"AI 调用失败: {str(e)}"}
@@ -198,14 +238,9 @@ def extract_fields_with_ai(text, project_id=None):
 
 def extract_risks_with_ai(text, project_id=None):
     """
-    使用 AI 从文本中识别风险条款
+    使用 AI 从文本中识别风险条款（含多模型自动回退）
     返回: {"success": True, "risks": [...]} 或 {"success": False, "message": "..."}
     """
-    # 检查模型配置
-    cfg = get_active_model_config()
-    if not cfg:
-        return {"success": False, "message": "未配置或启用大模型，请先在设置中配置并启用一个模型"}
-
     # 智能文本选择
     processed_text = _extract_key_sections(text, max_chars=60000)
 
@@ -215,23 +250,26 @@ def extract_risks_with_ai(text, project_id=None):
     ]
 
     try:
-        response = call_llm(messages, temperature=0.1, max_tokens=3000)
+        response, model_name = _call_llm_with_fallback(messages, temperature=0.1, max_tokens=8000)
         risks = _parse_json_array_response(response)
 
         if risks is not None:
             return {"success": True, "risks": risks}
         else:
-            return {"success": False, "message": "AI 返回格式解析失败"}
+            return {"success": False, "message": f"AI ({model_name}) 风险返回格式解析失败"}
 
     except Exception as e:
         return {"success": False, "message": f"AI 调用失败: {str(e)}"}
 
 
 def _parse_json_response(response):
-    """解析 JSON 响应"""
+    """从大模型响应中解析 JSON — 多重策略确保成功"""
+    if not response or not response.strip():
+        return None
+
     text = response.strip()
 
-    # 尝试提取 JSON 块
+    # --- 策略1：提取 ```json ... ``` 代码块 ---
     if "```json" in text:
         start = text.index("```json") + 7
         end = text.index("```", start)
@@ -241,32 +279,69 @@ def _parse_json_response(response):
         end = text.index("```", start)
         text = text[start:end].strip()
 
+    # --- 策略2：在完整文本中找第一个 { 和最后一个 } ---
+    if text.strip() and not text.strip().startswith("{"):
+        first_brace = text.find("{")
+        last_brace = text.rfind("}")
+        if first_brace >= 0 and last_brace > first_brace:
+            text = text[first_brace:last_brace + 1]
+
+    # --- 策略3：尝试直接 JSON 解析 ---
     try:
-        return json.loads(text)
+        data = json.loads(text)
+        if isinstance(data, dict) and len(data) > 0:
+            return data
     except json.JSONDecodeError:
-        # 尝试更宽松的解析
-        result = {}
-        patterns = [
-            (r'"project_name"\s*:\s*"([^"]*)"', "project_name"),
-            (r'"project_no"\s*:\s*"([^"]*)"', "project_no"),
-            (r'"purchaser"\s*:\s*"([^"]*)"', "purchaser"),
-            (r'"agency"\s*:\s*"([^"]*)"', "agency"),
-            (r'"budget_amount"\s*:\s*"([^"]*)"', "budget_amount"),
-            (r'"bid_deadline"\s*:\s*"([^"]*)"', "bid_deadline"),
-            (r'"opening_time"\s*:\s*"([^"]*)"', "opening_time"),
-        ]
-        for pattern, key in patterns:
-            match = re.search(pattern, response)
-            if match:
-                result[key] = match.group(1)
-        return result if result else None
+        pass
+
+    # --- 策略4：尝试清理常见格式问题后再解析 ---
+    # 移除尾部逗号 (JSON 不允许 trailing comma)
+    cleaned = re.sub(r',\s*}', '}', text)
+    cleaned = re.sub(r',\s*]', ']', cleaned)
+    try:
+        data = json.loads(cleaned)
+        if isinstance(data, dict) and len(data) > 0:
+            return data
+    except json.JSONDecodeError:
+        pass
+
+    # --- 策略5：正则表达式逐个字段提取（覆盖全部31个字段） ---
+    # 匹配 "field_key": "value" 格式，值可以包含转义引号和中文
+    all_field_keys = [
+        "project_name", "project_no", "section_no", "bidding_method",
+        "procurement_type", "project_location", "purchaser", "agency",
+        "purchaser_contact", "purchaser_phone", "agency_contact",
+        "agency_phone", "email", "budget_amount", "max_price",
+        "control_price", "bid_bond_amount", "performance_bond",
+        "announce_date", "register_start", "register_end", "clarify_end",
+        "bond_deadline", "bid_deadline", "opening_time",
+        "register_location", "doc_get_location", "submit_location",
+        "opening_location", "system_content", "software_modules",
+    ]
+
+    result = {}
+    for key in all_field_keys:
+        # 匹配 "key": "value" - 支持中文、标点、括号、转义引号等
+        pattern = r'"' + re.escape(key) + r'"\s*:\s*"((?:[^"\\]|\\.)*)"'
+        match = re.search(pattern, response)
+        if match:
+            val = match.group(1).strip()
+            # 取消转义
+            val = val.replace('\\"', '"').replace('\\n', '\n').replace('\\/', '/')
+            if val:
+                result[key] = val
+
+    return result if result else None
 
 
 def _parse_json_array_response(response):
-    """解析 JSON 数组响应"""
+    """从大模型响应中解析 JSON 数组（风险条款等）— 多重策略"""
+    if not response or not response.strip():
+        return None
+
     text = response.strip()
 
-    # 尝试提取 JSON 块
+    # --- 策略1：提取 ```json ... ``` 代码块 ---
     if "```json" in text:
         start = text.index("```json") + 7
         end = text.index("```", start)
@@ -276,13 +351,86 @@ def _parse_json_array_response(response):
         end = text.index("```", start)
         text = text[start:end].strip()
 
+    # --- 策略2：尝试直接解析为 JSON 数组 ---
     try:
         data = json.loads(text)
         if isinstance(data, list):
             return data
-        return None
+        if isinstance(data, dict):
+            # 模型可能返回 { "risks": [...], "items": [...] } 等
+            for key in ["risks", "items", "risk_items", "data", "list", "result"]:
+                if key in data and isinstance(data[key], list):
+                    return data[key]
     except json.JSONDecodeError:
-        return None
+        pass
+
+    # --- 策略3：在文本中查找第一个 [ 和最后一个 ] ---
+    first_bracket = text.find("[")
+    last_bracket = text.rfind("]")
+    if first_bracket >= 0 and last_bracket > first_bracket:
+        candidate = text[first_bracket:last_bracket + 1]
+        try:
+            data = json.loads(candidate)
+            if isinstance(data, list):
+                return data
+        except json.JSONDecodeError:
+            pass
+
+    # --- 策略4：清理尾部逗号后重试 ---
+    if first_bracket >= 0 and last_bracket > first_bracket:
+        candidate = text[first_bracket:last_bracket + 1]
+        cleaned = re.sub(r',\s*]', ']', candidate)
+        cleaned = re.sub(r',\s*}', '}', cleaned)
+        try:
+            data = json.loads(cleaned)
+            if isinstance(data, list):
+                return data
+            if isinstance(data, dict):
+                for key in ["risks", "items", "risk_items", "data", "list"]:
+                    if key in data and isinstance(data[key], list):
+                        return data[key]
+        except json.JSONDecodeError:
+            pass
+
+    # --- 策略5：截断 JSON 恢复 — 大模型可能因 max_tokens 限制输出不完整 ---
+    if first_bracket >= 0:
+        candidate = text[first_bracket:] if last_bracket < 0 else text[first_bracket:last_bracket + 1]
+        # 手动扫描，找最后一个完整的 {...} 对象
+        # candidate 以 [ 开头，深度 = 0 表示在数组级；遇到对象内 } 回到深度 0 表示对象完成
+        depth = 0
+        in_string = False
+        escape_next = False
+        last_complete_pos = -1
+        for i, ch in enumerate(candidate):
+            if escape_next:
+                escape_next = False
+                continue
+            if ch == '\\':
+                escape_next = True
+                continue
+            if ch == '"':
+                in_string = not in_string
+                continue
+            if not in_string:
+                if ch == '{':
+                    depth += 1
+                elif ch == '}':
+                    depth -= 1
+                    # 当深度回到 0（即回到数组级但未到数组结尾）时，上一个对象完成
+                    # 检查：如果此 } 后面跟着 , 或 whitespace 则是对象间分隔
+                    if depth == 0:
+                        last_complete_pos = i
+
+        if last_complete_pos > 0:
+            recovered = "[" + candidate[1:last_complete_pos + 1] + "]"
+            try:
+                data = json.loads(recovered)
+                if isinstance(data, list) and len(data) > 0:
+                    return data
+            except json.JSONDecodeError:
+                pass
+
+    return None
 
 
 def analyze_document_full(text, project_id=None):

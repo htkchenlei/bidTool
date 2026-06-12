@@ -37,9 +37,7 @@ FIELD_DEFINITIONS = {
     "section_no": {"label": "标段或包号", "group": "基础信息"},
     "bidding_method": {"label": "招标方式", "group": "基础信息"},
     "procurement_type": {"label": "采购类型", "group": "基础信息"},
-    "procurement_summary": {"label": "采购内容摘要", "group": "基础信息"},
     "project_location": {"label": "项目地点", "group": "基础信息"},
-    "fund_source": {"label": "资金来源", "group": "基础信息"},
     # 机构与联系人
     "purchaser": {"label": "招标人或采购人", "group": "机构与联系人"},
     "agency": {"label": "招标代理机构", "group": "机构与联系人"},
@@ -53,14 +51,11 @@ FIELD_DEFINITIONS = {
     "max_price": {"label": "最高限价", "group": "金额信息"},
     "control_price": {"label": "招标控制价", "group": "金额信息"},
     "bid_bond_amount": {"label": "投标保证金金额", "group": "金额信息"},
-    "bid_bond_method": {"label": "保证金缴纳方式", "group": "金额信息"},
     "performance_bond": {"label": "履约保证金", "group": "金额信息"},
     # 时间信息
     "announce_date": {"label": "公告发布时间", "group": "时间信息"},
     "register_start": {"label": "报名开始时间", "group": "时间信息"},
     "register_end": {"label": "报名截止时间", "group": "时间信息"},
-    "doc_get_start": {"label": "招标文件获取开始时间", "group": "时间信息"},
-    "doc_get_end": {"label": "招标文件获取截止时间", "group": "时间信息"},
     "clarify_end": {"label": "答疑或澄清截止时间", "group": "时间信息"},
     "bond_deadline": {"label": "保证金缴纳截止时间", "group": "时间信息"},
     "bid_deadline": {"label": "投标截止时间", "group": "时间信息"},
@@ -70,24 +65,9 @@ FIELD_DEFINITIONS = {
     "doc_get_location": {"label": "文件获取地点或平台", "group": "地点信息"},
     "submit_location": {"label": "投标文件递交地点或平台", "group": "地点信息"},
     "opening_location": {"label": "开标地点或平台", "group": "地点信息"},
-    # 信息化专项
-    "system_content": {"label": "系统建设内容", "group": "信息化专项"},
-    "software_modules": {"label": "软件功能模块", "group": "信息化专项"},
-    "hardware_list": {"label": "硬件设备清单", "group": "信息化专项"},
-    "security_level": {"label": "等保要求", "group": "信息化专项"},
-    "crypto_requirement": {"label": "密评要求", "group": "信息化专项"},
-    "xinchuang_requirement": {"label": "信创或国产化要求", "group": "信息化专项"},
-    "data_migration": {"label": "数据迁移要求", "group": "信息化专项"},
-    "interface_requirement": {"label": "接口对接要求", "group": "信息化专项"},
-    "implementation_period": {"label": "实施周期", "group": "信息化专项"},
-    "trial_run": {"label": "试运行要求", "group": "信息化专项"},
-    "acceptance_criteria": {"label": "验收标准", "group": "信息化专项"},
-    "maintenance_period": {"label": "运维期限", "group": "信息化专项"},
-    "response_time": {"label": "运维响应时间", "group": "信息化专项"},
-    "onsite_requirement": {"label": "驻场要求", "group": "信息化专项"},
-    "source_code_requirement": {"label": "源代码要求", "group": "信息化专项"},
-    "ip_requirement": {"label": "知识产权要求", "group": "信息化专项"},
-    "data_ownership": {"label": "数据归属要求", "group": "信息化专项"},
+    # 项目建设内容
+    "system_content": {"label": "系统建设内容", "group": "项目建设内容"},
+    "software_modules": {"label": "软件功能模块", "group": "项目建设内容"},
 }
 
 # 风险类别
@@ -504,6 +484,43 @@ def get_project(project_id):
     fields = load_extracted_fields()
     project_fields = [f for f in fields if f.get("project_id") == project_id]
 
+    # 兼容处理 1：如果该项目没有任何字段记录（可能是老项目），从 FIELD_DEFINITIONS 动态生成
+    if not project_fields:
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        for field_key, field_def in FIELD_DEFINITIONS.items():
+            project_fields.append({
+                "id": str(uuid.uuid4())[:8],
+                "project_id": project_id,
+                "field_key": field_key,
+                "field_label": field_def["label"],
+                "field_group": field_def["group"],
+                "machine_value": "",
+                "confirmed_value": "",
+                "review_status": "pending",
+                "confidence": 0.0,
+                "source_file_id": "",
+                "source_file_name": "",
+                "created_at": now,
+                "updated_at": now,
+            })
+
+    # 兼容处理 2：如果字段的 machine_value 为空，尝试从 project 对象获取 URL 抓取的值
+    project_property_map = {
+        "project_name": "name",
+        "project_no": "project_no",
+        "purchaser": "purchaser",
+        "agency": "agency",
+        "budget_amount": "budget_amount",
+        "max_price": "max_price",
+        "bid_deadline": "bid_deadline",
+        "opening_time": "opening_time",
+    }
+    for f in project_fields:
+        if not f.get("machine_value"):
+            prop_key = project_property_map.get(f["field_key"])
+            if prop_key and project.get(prop_key):
+                f["machine_value"] = project[prop_key]
+
     # 获取风险项
     risks = load_risk_items()
     project_risks = [r for r in risks if r.get("project_id") == project_id]
@@ -741,7 +758,11 @@ def _get_file_type(ext):
 def get_project_fields(project_id):
     """获取项目的字段提取结果"""
     fields = load_extracted_fields()
-    project_fields = [f for f in fields if f.get("project_id") == project_id]
+    valid_keys = set(FIELD_DEFINITIONS.keys())
+    project_fields = [
+        f for f in fields
+        if f.get("project_id") == project_id and f.get("field_key") in valid_keys
+    ]
 
     # 按分组组织
     grouped = {}
@@ -1137,20 +1158,50 @@ def extract_project_info(project_id):
 
 
 def _update_extracted_fields(project_id, extracted_values, source_file=None):
-    """更新字段提取结果"""
+    """更新或创建字段提取结果
+    - 对于已存在的字段：更新 machine_value（如果 AI 提取到了新值）
+    - 对于不存在的字段：从 FIELD_DEFINITIONS 中创建新条目，填入 AI 提取值（即使为空也创建占位符）
+    """
     fields = load_extracted_fields()
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    source_file_id = source_file.get("id", "") if source_file else ""
+    source_file_name = source_file.get("original_name", "") if source_file else ""
 
+    # 构建已存在字段的索引：key = field_key
+    existing_index = {}
     for i, f in enumerate(fields):
         if f["project_id"] == project_id:
-            field_key = f["field_key"]
-            if field_key in extracted_values and extracted_values[field_key]:
-                fields[i]["machine_value"] = extracted_values[field_key]
-                fields[i]["confidence"] = 0.8  # 默认置信度
-                if source_file:
-                    fields[i]["source_file_id"] = source_file.get("id", "")
-                    fields[i]["source_file_name"] = source_file.get("original_name", "")
-                fields[i]["updated_at"] = now
+            existing_index[f["field_key"]] = i
+
+    for field_key, field_def in FIELD_DEFINITIONS.items():
+        new_value = extracted_values.get(field_key, "")
+        if field_key in existing_index:
+            # 已存在的字段：有值才更新
+            if new_value:
+                idx = existing_index[field_key]
+                fields[idx]["machine_value"] = new_value
+                fields[idx]["confidence"] = 0.8
+                fields[idx]["source_file_id"] = source_file_id
+                fields[idx]["source_file_name"] = source_file_name
+                fields[idx]["updated_at"] = now
+        else:
+            # 不存在的字段：创建新条目
+            new_field = {
+                "id": str(uuid.uuid4())[:8],
+                "project_id": project_id,
+                "field_key": field_key,
+                "field_label": field_def["label"],
+                "field_group": field_def["group"],
+                "machine_value": new_value or "",
+                "confirmed_value": "",
+                "review_status": "pending",
+                "confidence": 0.8 if new_value else 0.0,
+                "source_file_id": source_file_id,
+                "source_file_name": source_file_name,
+                "created_at": now,
+                "updated_at": now,
+            }
+            fields.append(new_field)
 
     save_extracted_fields(fields)
 

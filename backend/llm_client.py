@@ -45,6 +45,23 @@ def get_active_model_config():
     return m
 
 
+def get_all_enabled_model_configs():
+    """获取所有已启用且有 API Key 的模型配置列表（激活模型排在最前）"""
+    models, active_id = _load_config()
+    result = []
+    active_cfg = None
+    for mid, m in models.items():
+        if m.get("enabled") and m.get("api_key"):
+            if mid == active_id:
+                active_cfg = m
+            else:
+                result.append(m)
+    # 激活模型排在最前面
+    if active_cfg:
+        result.insert(0, active_cfg)
+    return result
+
+
 def _model_supports_vision(cfg: dict) -> bool:
     """检测模型是否支持视觉/多模态输入（优先读取配置中的 supports_vision 字段）"""
     # 优先：从配置字段读取
@@ -116,26 +133,63 @@ def call_llm(messages: list, temperature: float = 0.1, max_tokens: int = 1000) -
         "max_tokens": max_tokens,
     }
 
-    resp = requests.post(url, headers=headers, json=body, timeout=60)
+    resp = requests.post(url, headers=headers, json=body, timeout=240)
 
-    if resp.status_code == 400:
-        detail = ""
-        try:
-            detail = resp.json().get("error", {}).get("message", "")
-        except Exception:
-            detail = resp.text[:300]
+    # 尝试解析响应为 JSON，不管 Content-Type 是什么
+    data = None
+    try:
+        data = resp.json()
+    except Exception:
+        # API 返回了非 JSON（可能是 HTML 页面、重定向等）
+        detail = resp.text[:500]
+        if resp.status_code == 200:
+            raise RuntimeError(
+                f"大模型 API 返回了非 JSON 响应 (Content-Type: {resp.headers.get('Content-Type', 'unknown')})。\n"
+                f"可能原因：\n"
+                f"1. API Base URL 不正确（缺少 /v1 后缀？）\n"
+                f"2. 当前 Base URL: {base_url}\n"
+                f"3. 请在设置中测试连接后再使用\n"
+                f"响应内容: {detail[:300]}"
+            )
+        else:
+            raise RuntimeError(
+                f"大模型 API 请求失败 ({resp.status_code})：{detail[:300]}"
+            )
+
+    # 状态码 200 但返回了 error 对象
+    if resp.status_code == 200 and isinstance(data, dict) and "error" in data:
+        error_msg = data["error"].get("message", str(data["error"]))
         raise RuntimeError(
-            f"大模型 API 请求失败 (400)：{detail or '请求参数不合法'}\n"
-            "常见原因：\n"
-            "1. 模型名称不正确（如 deepseek 应为 deepseek-chat）\n"
-            "2. 模型不支持图片/视觉输入（请切换到多模态模型）\n"
-            f"3. API Key 无效或过期\n"
-            f"当前模型：{cfg['name']} ({cfg.get('model','')})，请检查设置中的模型配置"
+            f"大模型 API 返回错误：{error_msg}\n"
+            f"可能原因：API Key 权限不足、模型名称不正确或余额不足。\n"
+            f"当前模型：{cfg.get('name','')} ({cfg.get('model','')})"
         )
 
-    resp.raise_for_status()
-    data = resp.json()
-    return data["choices"][0]["message"]["content"]
+    if resp.status_code != 200:
+        detail = ""
+        if isinstance(data, dict):
+            detail = data.get("error", {}).get("message", str(data))
+        else:
+            detail = resp.text[:300]
+        raise RuntimeError(
+            f"大模型 API 请求失败 ({resp.status_code})：{detail or '请求参数不合法'}\n"
+            f"当前模型：{cfg.get('name','')} ({cfg.get('model','')})，请检查设置中的模型配置"
+        )
+
+    # 提取响应内容
+    if not isinstance(data, dict) or "choices" not in data:
+        raise RuntimeError(
+            f"大模型 API 响应格式不符合预期：缺少 'choices' 字段。\n"
+            f"实际响应（前500字符）: {str(data)[:500]}"
+        )
+
+    try:
+        return data["choices"][0]["message"]["content"]
+    except (KeyError, IndexError, TypeError) as e:
+        raise RuntimeError(
+            f"大模型 API 响应格式异常 ({e})：无法从 choices 中提取 content。\n"
+            f"完整响应（前500字符）: {str(data)[:500]}"
+        )
 
 
 def extract_cert_from_image(image_data: bytes) -> dict:
