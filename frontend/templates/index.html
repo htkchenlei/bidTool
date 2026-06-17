@@ -36,6 +36,16 @@
       </div>
     </div>
     <div class="topbar-actions">
+      <div v-if="savedActiveModelInfo" class="topbar-model-info">
+        <span class="topbar-model-icon">🤖</span>
+        <span class="topbar-model-label">AI模型:</span>
+        <span class="topbar-model-name" :title="'模型ID: ' + savedActiveModelInfo.model">{{ savedActiveModelInfo.name }}</span>
+        <span class="topbar-model-id">{{ savedActiveModelInfo.model }}</span>
+      </div>
+      <div v-else class="topbar-model-info topbar-model-info--empty">
+        <span class="topbar-model-icon">⚠️</span>
+        <span>未设置 AI 模型</span>
+      </div>
       <div class="status-dot" :class="apiStatus ? 'status-dot--online' : 'status-dot--offline'">
         <span class="dot-pulse"></span>
         <span>{{ apiStatus ? '服务正常' : '服务离线' }}</span>
@@ -359,7 +369,12 @@
             </button>
             <h2 class="project-detail-title">{{ currentProject.name }}</h2>
             <div class="project-detail-actions">
-              <button class="btn btn--danger" @click="deleteProject(currentProject.id)" style="margin-right:auto">
+              <button class="btn btn--primary" @click="reAnalyzeProject(currentProject.id)" :disabled="reAnalyzing">
+                <svg v-if="!reAnalyzing" width="14" height="14" viewBox="0 0 24 24" fill="none"><polyline points="23,4 23,10 17,10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                <svg v-else class="spinner" width="12" height="12" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" opacity="0.25"/><path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>
+                {{ reAnalyzing ? '分析中...' : '重新分析' }}
+              </button>
+              <button class="btn btn--danger" @click="deleteProject(currentProject.id)">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
                   <polyline points="3,6 5,6 21,6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
                   <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -1057,6 +1072,7 @@
                   <div class="model-name">
                     {{ model.name }}
                     <span v-if="model.is_custom" class="custom-badge">自定义</span>
+                    <span v-if="model.is_free" class="free-badge">免费</span>
                   </div>
                   <div class="model-model">{{ model.model || '待配置' }}</div>
                 </div>
@@ -1076,6 +1092,11 @@
               </div>
             </div>
             <div class="model-form">
+              <!-- 免费模型注册提示 -->
+              <div v-if="model.is_free" class="model-free-hint">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 15v-2h2v2h-2zm0-10v6h2V7h-2z" fill="currentColor"/></svg>
+                <span>免费使用，无需绑卡。访问 <a href="https://platform.agnes-ai.com" target="_blank">platform.agnes-ai.com</a> 注册获取 API Key</span>
+              </div>
               <div class="form-group">
                 <label class="form-label">API Key</label>
                 <div class="input-with-toggle">

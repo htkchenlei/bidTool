@@ -199,6 +199,7 @@ createApp({
     const newProjectUploadDragover = ref(false);
     const newProjectFilesInput = ref(null);
     const analyzingProjects = reactive({});
+    const reAnalyzing = ref(false);
     const extracting = ref(false);
     const editingField = ref(null);
     const fieldEditValue = ref('');
@@ -236,17 +237,22 @@ createApp({
       }
       try {
         const res = await fetch(`/api/projects/${projectId}`, { method: 'DELETE' });
-        const data = await res.json();
+        const text = await res.text();
+        let data;
+        try { data = JSON.parse(text); }
+        catch { alert('服务器返回异常，请刷新页面后重试'); return; }
         if (data.success) {
           // 如果当前打开的就是被删除的项目，回到列表
           if (currentProject.value && currentProject.value.id === projectId) {
             currentProject.value = null;
           }
           await loadProjects();
+        } else {
+          alert('删除失败: ' + (data.message || '未知错误'));
         }
       } catch (e) {
         console.error('删除项目失败:', e);
-        alert('删除项目失败');
+        alert('删除项目失败: ' + (e.message || e));
       }
     };
 
@@ -317,6 +323,9 @@ createApp({
     // 开始分析：解析文件并调用 AI 提取
     const analyzeProject = async (projectId) => {
       analyzingProjects[projectId] = true;
+      // 乐观更新本地列表状态，使列表页也能正确显示"分析中"
+      const proj = projects.value.find(p => p.id === projectId);
+      if (proj) proj.status = 'analyzing';
       try {
         const res = await fetch(`/api/projects/${projectId}/analyze`, { method: 'POST' });
         const text = await res.text();
@@ -325,14 +334,59 @@ createApp({
         catch { alert('服务器返回异常，请刷新页面后重试'); return; }
         if (!data.success) {
           alert(data.message || '分析失败');
+          // 分析失败，恢复原状态
+          if (proj) proj.status = data.status || proj.status || 'pending';
         } else {
           await loadProjects();
         }
       } catch (e) {
         console.error('分析失败:', e);
         alert('分析失败：' + (e.message || e));
+        // 异常时恢复原状态
+        if (proj) proj.status = proj.status === 'analyzing' ? 'pending' : proj.status;
       } finally {
         analyzingProjects[projectId] = false;
+      }
+    };
+
+    // 重新分析：在项目详情页使用，用当前AI模型重新提取字段和风险
+    const reAnalyzeProject = async (projectId) => {
+      if (!confirm('确定要重新分析吗？将使用当前设置的 AI 模型，对公告网页和上传文件重新提取信息。')) return;
+      reAnalyzing.value = true;
+      // 乐观更新本地列表状态和当前项目状态，使列表页也能正确显示"分析中"
+      const proj = projects.value.find(p => p.id === projectId);
+      if (proj) proj.status = 'analyzing';
+      if (currentProject.value && currentProject.value.id === projectId) {
+        currentProject.value.status = 'analyzing';
+      }
+      try {
+        const res = await fetch(`/api/projects/${projectId}/analyze`, { method: 'POST' });
+        const text = await res.text();
+        let data;
+        try { data = JSON.parse(text); }
+        catch { alert('服务器返回异常，请重试'); return; }
+        if (!data.success) {
+          alert(data.message || '重新分析失败');
+          // 分析失败，恢复原状态
+          if (proj) proj.status = data.status || proj.status || 'completed';
+          if (currentProject.value && currentProject.value.id === projectId) {
+            currentProject.value.status = proj ? proj.status : 'completed';
+          }
+        } else {
+          // 刷新当前项目详情（字段和风险）
+          await openProject(projectId);
+          await loadProjects();
+        }
+      } catch (e) {
+        console.error('重新分析失败:', e);
+        alert('重新分析失败：' + (e.message || e));
+        // 异常时恢复原状态
+        if (proj) proj.status = proj.status === 'analyzing' ? 'completed' : proj.status;
+        if (currentProject.value && currentProject.value.id === projectId) {
+          currentProject.value.status = proj ? proj.status : 'completed';
+        }
+      } finally {
+        reAnalyzing.value = false;
       }
     };
 
@@ -1068,7 +1122,16 @@ createApp({
 
     // ── 设置 ────────────────────────────────────────────────
     const modelConfigs = ref([]);
-    const activeModel = ref('');
+    const activeModel = ref('');          // 下拉框当前选中值（编辑态）
+    const savedActiveModel = ref('');     // 已保存的活跃模型（用于顶部栏展示）
+    const activeModelInfo = computed(() => {
+      if (!activeModel.value || !modelConfigs.value.length) return null;
+      return modelConfigs.value.find(m => m.id === activeModel.value) || null;
+    });
+    const savedActiveModelInfo = computed(() => {
+      if (!savedActiveModel.value || !modelConfigs.value.length) return null;
+      return modelConfigs.value.find(m => m.id === savedActiveModel.value) || null;
+    });
     const saving = ref(false);
     const toastVisible = ref(false);
     const showKey = ref({});
@@ -1197,6 +1260,7 @@ createApp({
           is_custom: m.is_custom || m.id === 'custom',
         }));
         activeModel.value = data.active_model || '';
+        savedActiveModel.value = data.active_model || '';
         const keys = {};
         modelConfigs.value.forEach(m => { keys[m.id] = false; });
         showKey.value = keys;
@@ -1211,10 +1275,16 @@ createApp({
       testingModel.value = model.id;
       delete testResults[model.id];
       try {
+        // 同时发送 model_id 和当前表单值，后端优先用表单值测试（未保存时也能测）
         const res = await fetch('/api/settings/test-model', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ model_id: model.id }),
+          body: JSON.stringify({
+            model_id: model.id,
+            api_key: model.api_key || '',
+            base_url: model.base_url || '',
+            model: model.model || '',
+          }),
         });
         const data = await res.json();
         testResults[model.id] = { ok: data.success, msg: data.message };
@@ -1247,6 +1317,7 @@ createApp({
             active_model: activeModel.value,
           }),
         });
+        savedActiveModel.value = activeModel.value; // 保存成功后，顶部栏才更新
         toastVisible.value = true;
         setTimeout(() => { toastVisible.value = false; }, 2800);
       } catch {}
@@ -1282,6 +1353,7 @@ createApp({
       loadProjects, openProject, closeProject, deleteProject, cancelNewProject,
       handleNewProjectFileDrop, handleNewProjectFileSelect,
       removeNewProjectFile, formatFileSize, createProject, analyzeProject, analyzingProjects,
+      reAnalyzeProject, reAnalyzing,
       uploadProjectFiles, loadProjectFiles, parseProjectFile, parseAllProjectFiles,
       extractProjectInfo, deleteProjectFile, downloadProjectFile,
       startEditField, saveFieldReview, copyFieldValue, confirmRisk, ignoreRisk,
@@ -1301,7 +1373,7 @@ createApp({
       addCertCategory, startRenameCat, doRenameCat, deleteCertCat,
       getCertStatusClass, getCertStatusLabel,
       fileCount, analysisCount, certCount, expiringSoon, expiringSoonCount,
-      modelConfigs, activeModel, saving, saveSettings, toastVisible, showKey, toggleKeyVisibility,
+      modelConfigs, activeModel, activeModelInfo, savedActiveModel, savedActiveModelInfo, saving, saveSettings, toastVisible, showKey, toggleKeyVisibility,
       testingModel, testResults, testModel,
       showNewModelModal, newModelForm, newModelTesting, newModelTestResult, newModelCreating,
       newModelShowKey,

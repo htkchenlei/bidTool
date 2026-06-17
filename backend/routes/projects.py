@@ -29,6 +29,66 @@ PROJECT_FILES_FILE = os.path.join(DATA_DIR, "project_files.json")
 EXTRACTED_FIELDS_FILE = os.path.join(DATA_DIR, "extracted_fields.json")
 RISK_ITEMS_FILE = os.path.join(DATA_DIR, "risk_items.json")
 
+# ── Markitdown 网页转 MD ─────────────────────────────────────
+def convert_url_to_markdown(url: str, project_id: str = None) -> dict:
+    """
+    使用 markitdown 将公告网页 URL 转换为 Markdown 格式
+    返回: {
+        "success": bool,
+        "markdown_content": str,
+        "content_length": int,
+        "error": str or None
+    }
+    """
+    result = {
+        "success": False,
+        "markdown_content": "",
+        "content_length": 0,
+        "error": None
+    }
+
+    try:
+        from markitdown import MarkItDown
+
+        md_converter = MarkItDown()
+        conversion_result = md_converter.convert(url)
+
+        # 提取 Markdown 文本内容
+        md_content = conversion_result.text_content if hasattr(conversion_result, 'text_content') else str(conversion_result)
+
+        if md_content and len(md_content.strip()) > 10:
+            result["success"] = True
+            result["markdown_content"] = md_content.strip()
+            result["content_length"] = len(md_content.strip())
+
+            # 保存 MD 文件到 parsed 目录（供后续查看和复用）
+            if project_id:
+                parsed_dir = os.path.join(PARSED_DIR, project_id)
+                os.makedirs(parsed_dir, exist_ok=True)
+                md_file_path = os.path.join(parsed_dir, "announcement.md")
+                with open(md_file_path, "w", encoding="utf-8") as f:
+                    f.write(f"# 公告网页内容\n\n**来源URL**: {url}\n**转换时间**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n---\n\n{md_content}")
+                result["md_file_path"] = md_file_path
+        else:
+            result["error"] = "markitdown 转换结果为空，可能网页无法正常访问或内容过少"
+
+    except ImportError:
+        result["error"] = "markitdown 库未安装，请运行: pip install markitdown"
+    except Exception as e:
+        result["error"] = f"markitdown 转换失败: {str(e)}"
+
+    return result
+
+
+def get_saved_markdown(project_id: str) -> str:
+    """获取项目已保存的公告 MD 内容"""
+    md_file_path = os.path.join(PARSED_DIR, project_id, "announcement.md")
+    if os.path.exists(md_file_path):
+        with open(md_file_path, "r", encoding="utf-8") as f:
+            return f.read()
+    return ""
+
+
 # ── 字段定义 ────────────────────────────────────────────────
 FIELD_DEFINITIONS = {
     # 基础信息
@@ -574,45 +634,69 @@ def update_project(project_id):
 @projects_bp.route("/api/projects/<project_id>", methods=["DELETE"])
 def delete_project(project_id):
     """删除项目及其关联数据"""
-    projects = load_projects()
-    projects = [p for p in projects if p["id"] != project_id]
-    save_projects(projects)
+    errors = []
 
-    # 删除关联文件记录
-    files = load_project_files()
-    files = [f for f in files if f.get("project_id") != project_id]
-    save_project_files(files)
+    try:
+        # 删除项目记录
+        projects = load_projects()
+        projects = [p for p in projects if p["id"] != project_id]
+        save_projects(projects)
+    except Exception as e:
+        errors.append(f"删除项目记录失败: {e}")
 
-    # 删除提取字段
-    fields = load_extracted_fields()
-    fields = [f for f in fields if f.get("project_id") != project_id]
-    save_extracted_fields(fields)
+    try:
+        # 删除关联文件记录
+        files = load_project_files()
+        files = [f for f in files if f.get("project_id") != project_id]
+        save_project_files(files)
+    except Exception as e:
+        errors.append(f"删除文件记录失败: {e}")
 
-    # 删除风险项
-    risks = load_risk_items()
-    risks = [r for r in risks if r.get("project_id") != project_id]
-    save_risk_items(risks)
+    try:
+        # 删除提取字段
+        fields = load_extracted_fields()
+        fields = [f for f in fields if f.get("project_id") != project_id]
+        save_extracted_fields(fields)
+    except Exception as e:
+        errors.append(f"删除字段数据失败: {e}")
 
-    # 删除上传的文件
+    try:
+        # 删除风险项
+        risks = load_risk_items()
+        risks = [r for r in risks if r.get("project_id") != project_id]
+        save_risk_items(risks)
+    except Exception as e:
+        errors.append(f"删除风险数据失败: {e}")
+
+    # 删除上传的文件目录
     project_upload_dir = os.path.join(UPLOADS_DIR, project_id)
     if os.path.exists(project_upload_dir):
-        shutil.rmtree(project_upload_dir)
+        try:
+            shutil.rmtree(project_upload_dir)
+        except Exception as e:
+            errors.append(f"删除上传文件失败: {e}")
 
-    # 删除解析结果
+    # 删除解析结果目录
     project_parsed_dir = os.path.join(PARSED_DIR, project_id)
     if os.path.exists(project_parsed_dir):
-        shutil.rmtree(project_parsed_dir)
+        try:
+            shutil.rmtree(project_parsed_dir)
+        except Exception as e:
+            errors.append(f"删除解析结果失败: {e}")
 
     # 删除关联的导出文件
     if os.path.exists(EXPORTS_DIR):
-        for fname in os.listdir(EXPORTS_DIR):
+        for fname in list(os.listdir(EXPORTS_DIR)):
             if project_id in fname:
                 fpath = os.path.join(EXPORTS_DIR, fname)
                 try:
                     if os.path.isfile(fpath):
                         os.remove(fpath)
-                except OSError:
-                    pass
+                except OSError as e:
+                    errors.append(f"删除导出文件 {fname} 失败: {e}")
+
+    if errors:
+        return jsonify({"success": False, "message": "; ".join(errors)})
 
     return jsonify({"success": True})
 
@@ -1287,16 +1371,92 @@ def parse_all_project_files(project_id):
     })
 
 
-# ── 开始分析：解析 + AI提取 一条龙 ────────────────────────
-@projects_bp.route("/api/projects/<project_id>/analyze", methods=["POST"])
-def analyze_project(project_id):
-    """一站式分析：先解析所有文件，再用 AI 提取字段和风险"""
+@projects_bp.route("/api/projects/<project_id>/markdown", methods=["GET"])
+def get_project_markdown(project_id):
+    """获取项目的公告网页 MD 内容"""
     projects = load_projects()
     project = next((p for p in projects if p["id"] == project_id), None)
     if not project:
         return jsonify({"success": False, "message": "项目不存在"}), 404
 
-    # Step 1: 解析所有未解析的文件
+    md_content = get_saved_markdown(project_id)
+    if md_content:
+        return jsonify({
+            "success": True,
+            "has_markdown": True,
+            "content": md_content,
+            "content_length": len(md_content),
+            "source_url": project.get("announcement_url", "")
+        })
+    else:
+        return jsonify({
+            "success": True,
+            "has_markdown": False,
+            "content": "",
+            "source_url": project.get("announcement_url", ""),
+            "message": "尚未转换公告网页为MD，请在分析时自动转换或调用转换接口"
+        })
+
+
+@projects_bp.route("/api/projects/<project_id>/markdown/convert", methods=["POST"])
+def convert_project_markdown(project_id):
+    """手动触发将公告网页转换为 Markdown（可重复执行以刷新）"""
+    projects = load_projects()
+    project = next((p for p in projects if p["id"] == project_id), None)
+    if not project:
+        return jsonify({"success": False, "message": "项目不存在"}), 404
+
+    announcement_url = project.get("announcement_url", "")
+    if not announcement_url:
+        return jsonify({"success": False, "message": "该项目没有配置公告网页链接"}), 400
+
+    md_result = convert_url_to_markdown(announcement_url, project_id)
+
+    if md_result["success"]:
+        return jsonify({
+            "success": True,
+            "content_length": md_result["content_length"],
+            "md_file_path": md_result.get("md_file_path", ""),
+            "message": f"成功转换为Markdown，共 {md_result['content_length']} 字符"
+        })
+    else:
+        return jsonify({
+            "success": False,
+            "error": md_result.get("error", "未知错误")
+        }), 500
+
+
+# ── 开始分析：解析 + AI提取 一条龙（含markitdown网页MD） ──────
+@projects_bp.route("/api/projects/<project_id>/analyze", methods=["POST"])
+def analyze_project(project_id):
+    """一站式分析：markitdown转MD + 解析文件 + AI提取字段和风险
+
+    新流程：
+    1. 用 markitdown 将公告网页 URL 转换为 Markdown
+    2. 解析所有上传的投标文件
+    3. 将 MD内容 + 投标文件内容 合并同时发给大模型
+    4. 大模型从多信息源中提取字段和识别风险（实现交叉匹配）
+    """
+    projects = load_projects()
+    project = next((p for p in projects if p["id"] == project_id), None)
+    if not project:
+        return jsonify({"success": False, "message": "项目不存在"}), 404
+
+    # ═══ Step 1: 使用 markitdown 将公告网页转换为 Markdown ═══
+    md_content = ""
+    md_result = {"success": False, "error": None}
+    announcement_url = project.get("announcement_url", "")
+
+    if announcement_url:
+        md_result = convert_url_to_markdown(announcement_url, project_id)
+        if md_result["success"]:
+            md_content = md_result["markdown_content"]
+            print(f"[markitdown] 成功转换公告网页为MD，长度: {md_result['content_length']} 字符")
+        else:
+            print(f"[markitdown] 转换失败: {md_result.get('error', '未知错误')}")
+            # MD转换失败不阻断流程，继续用文件分析
+
+    # ═══ Step 2: 解析所有未解析的投标文件 ═══
     files = load_project_files()
     project_files_all = [f for f in files if f.get("project_id") == project_id]
     files_to_parse = [f for f in project_files_all if f.get("parse_status") != "done"]
@@ -1331,14 +1491,15 @@ def analyze_project(project_id):
 
         save_project_files(files)
 
-    # Step 2: AI 提取字段和风险
+    # ═══ Step 3: 准备发送给大模型的完整内容（MD + 文件） ═══
     parsed_files = [f for f in files if f.get("project_id") == project_id and f.get("parse_status") == "done"]
 
-    if not parsed_files:
+    if not parsed_files and not md_content:
         return jsonify({
             "success": False,
-            "message": "没有可解析的文件，无法进行 AI 分析",
-            "parse_result": {"parsed_count": parsed_count, "total_count": len(project_files_all), "errors": parse_errors}
+            "message": "没有可解析的文件且公告网页也无法转换，无法进行 AI 分析",
+            "parse_result": {"parsed_count": parsed_count, "total_count": len(project_files_all), "errors": parse_errors},
+            "md_result": {"success": md_result.get("success", False), "error": md_result.get("error")}
         }), 400
 
     # 更新项目状态为分析中
@@ -1348,8 +1509,14 @@ def analyze_project(project_id):
             break
     save_projects(projects)
 
-    # 合并文本并调用 AI
+    # 构建多源内容：MD内容 + 投标文件内容
     all_text_parts = []
+
+    # 3a. 添加 markitdown 转换的公告 MD 内容（优先级高，放在最前面）
+    if md_content:
+        all_text_parts.append(f"【公告网页内容（来源：{announcement_url}）】\n{md_content}")
+
+    # 3b. 添加投标文件的解析内容
     for f in parsed_files:
         parsed_file = os.path.join(PARSED_DIR, project_id, f"{f['id']}.json")
         if os.path.exists(parsed_file):
@@ -1358,7 +1525,7 @@ def analyze_project(project_id):
                 content_parts = []
                 if parsed_data.get("text"):
                     content_parts.append(parsed_data["text"])
-                # 同时包含表格内容（预算/金额等关键信息常出现在表格中
+                # 同时包含表格内容（预算/金额等关键信息常出现在表格中）
                 if parsed_data.get("tables"):
                     table_text_parts = []
                     for idx, table in enumerate(parsed_data["tables"]):
@@ -1373,16 +1540,11 @@ def analyze_project(project_id):
                     if table_text_parts:
                         content_parts.append("\n\n" + "\n\n".join(table_text_parts))
                 combined_content = "\n".join(content_parts)
-                all_text_parts.append(f"【文件：{f['original_name']}】\n{combined_content}")
+                all_text_parts.append(f"【投标文件：{f['original_name']}】\n{combined_content}")
 
-    if not all_text_parts:
-        return jsonify({
-            "success": False,
-            "message": "解析内容为空",
-        }), 400
+    combined_text = "\n\n---\n\n".join(all_text_parts)
 
-    combined_text = "\n\n".join(all_text_parts)
-
+    # ═══ Step 4: AI 提取字段和风险（基于多源内容） ═══
     import sys as _sys_ai
     _sys_path_backup = _sys_ai.path[:]
     _sys_ai.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -1413,6 +1575,11 @@ def analyze_project(project_id):
 
     return jsonify({
         "success": True,
+        "md_result": {
+            "success": md_result.get("success", False),
+            "content_length": md_result.get("content_length", 0),
+            "error": md_result.get("error")
+        },
         "parse_result": {
             "parsed_count": parsed_count,
             "total_count": len(project_files_all),

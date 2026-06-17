@@ -1,6 +1,6 @@
 """
 设置 API — Blueprint
-管理多个大模型的 API 配置，包含 4 个内置模型，用户可通过"新建自定义模型"添加任意数量的兼容 OpenAI 格式的模型
+管理多个大模型的 API 配置，包含 5 个内置模型，用户可通过"新建自定义模型"添加任意数量的兼容 OpenAI 格式的模型
 """
 import os
 import json
@@ -49,12 +49,23 @@ DEFAULT_CONFIG = {
             "enabled": False,
             "supports_vision": False,
         },
+        {
+            "id": "agnes",
+            "name": "Agnes 2.0 Flash",
+            "api_key": "",
+            "base_url": "https://apihub.agnes-ai.com/v1",
+            "model": "agnes-2.0-flash",
+            "enabled": False,
+            "supports_vision": True,
+            "is_free": True,
+            "description": "免费模型，支持1M超长上下文，适合长文档分析。注册地址: platform.agnes-ai.com",
+        },
     ],
     "active_model": "",
 }
 
 # 内置模型 ID，用户不能删除这些
-BUILTIN_MODEL_IDS = {"openai", "deepseek", "qwen", "zhipu"}
+BUILTIN_MODEL_IDS = {"openai", "deepseek", "qwen", "zhipu", "agnes"}
 
 
 def load_config():
@@ -62,6 +73,13 @@ def load_config():
         try:
             with open(CONFIG_FILE, "r", encoding="utf-8") as f:
                 cfg = json.load(f)
+
+            # 迁移：确保内置模型都存在（新增的内置模型自动补齐）
+            existing_ids = {m.get("id") for m in cfg.get("models", [])}
+            for default_model in DEFAULT_CONFIG["models"]:
+                if default_model["id"] not in existing_ids:
+                    cfg.setdefault("models", []).append(default_model)
+
             return cfg
         except Exception:
             pass
@@ -118,30 +136,43 @@ def save_config_api():
 @settings_bp.route("/api/settings/test-model", methods=["POST"])
 def test_model():
     """测试大模型连接 — 支持两种模式：
-    1. 通过 model_id 测试已保存的模型
+    1. 通过 model_id 测试已保存的模型（若请求中同时携带 api_key/base_url/model，则用表单值覆盖）
     2. 通过 api_key/base_url/model 直接测试未保存的临时配置
     """
     data = request.get_json(silent=True) or {}
 
     target = None
     model_id = data.get("model_id", "")
+    form_api_key = (data.get("api_key") or "").strip()
+    form_base_url = (data.get("base_url") or "").strip()
+    form_model_name = (data.get("model") or "").strip()
+
     if model_id:
-        # 模式 1：测试已保存的模型
+        # 模式 1：从已保存配置加载，再用表单值覆盖（支持未保存时测试）
         cfg = load_config()
         for m in cfg.get("models", []):
             if m.get("id") == model_id:
-                target = m
+                target = m.copy()
                 break
         if not target:
             return jsonify({"success": False, "message": f"未找到模型：{model_id}"}), 404
+
+        # 用请求中的表单值覆盖（用户刚输入但还没保存的值优先）
+        if form_api_key and not form_api_key.startswith("*"):
+            target["api_key"] = form_api_key
+        if form_base_url:
+            target["base_url"] = form_base_url
+        if form_model_name:
+            target["model"] = form_model_name
+
         if not target.get("api_key"):
             return jsonify({"success": False, "message": "请先填写 API Key"}), 400
     else:
-        # 模式 2：直接测试传入的临时配置（未保存前的测试）
+        # 模式 2：直接使用传入的临时配置
         target = {
-            "api_key": data.get("api_key", ""),
-            "base_url": data.get("base_url", ""),
-            "model": data.get("model", ""),
+            "api_key": form_api_key,
+            "base_url": form_base_url,
+            "model": form_model_name,
         }
         if not target["api_key"]:
             return jsonify({"success": False, "message": "请输入 API Key"}), 400

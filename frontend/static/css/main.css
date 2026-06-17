@@ -207,6 +207,55 @@ html, body {
 
 .topbar-actions {
   margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+}
+
+.topbar-model-info {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--gray-600);
+  background: var(--gray-100);
+  border-radius: 20px;
+  padding: 4px 12px;
+  border: 1px solid var(--gray-200);
+}
+
+.topbar-model-info--empty {
+  color: var(--color-warning);
+  background: #fffbeb;
+  border-color: #fde68a;
+}
+
+.topbar-model-icon {
+  font-size: 13px;
+  line-height: 1;
+}
+
+.topbar-model-label {
+  color: var(--gray-400);
+}
+
+.topbar-model-name {
+  font-weight: 600;
+  color: var(--mac-purple);
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.topbar-model-id {
+  font-family: 'SF Mono', Consolas, monospace;
+  font-size: 11px;
+  color: var(--gray-400);
+  background: var(--white);
+  border-radius: 4px;
+  padding: 1px 6px;
+  border: 1px solid var(--gray-200);
 }
 
 .status-dot {
@@ -1221,8 +1270,58 @@ html, body {
   vertical-align: middle;
 }
 
+.free-badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 600;
+  color: #fff;
+  background: linear-gradient(135deg, #10b981, #059669);
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  margin-left: 6px;
+  vertical-align: middle;
+  animation: free-pulse 2s ease-in-out infinite;
+}
+
+@keyframes free-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
 .avatar--custom {
   background: linear-gradient(135deg, var(--mac-purple), var(--mac-pink)) !important;
+}
+
+.avatar--agnes {
+  background: linear-gradient(135deg, #10b981, #059669) !important;
+}
+
+.model-free-hint {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: linear-gradient(135deg, #ecfdf5, #d1fae5);
+  border: 1px solid #a7f3d0;
+  border-radius: var(--radius-md);
+  padding: var(--sp-2) var(--sp-3);
+  margin-bottom: var(--sp-3);
+  font-size: 12px;
+  color: #065f46;
+}
+
+.model-free-hint svg {
+  flex-shrink: 0;
+  color: #059669;
+}
+
+.model-free-hint a {
+  color: #059669;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.model-free-hint a:hover {
+  text-decoration: underline;
 }
 
 .model-test-row {
