@@ -30,3 +30,12 @@ Thumbs.db
 # Logs
 *.log
 logs/
+
+# Node.js (if any frontend build tool is added later)
+node_modules/
+dist/
+.build/
+.cache/
+
+# Markitdown cache
+.markitdown/
