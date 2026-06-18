@@ -11,10 +11,9 @@ from flask import Blueprint, jsonify, request, send_file
 
 certs_bp = Blueprint("certs", __name__)
 
-# 允许的文件类型
+# 允许的文件类型（仅支持图片格式）
 ALLOWED_IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
-ALLOWED_PDF_EXTS = {".pdf"}
-ALLOWED_EXTS = ALLOWED_IMAGE_EXTS | ALLOWED_PDF_EXTS
+ALLOWED_EXTS = ALLOWED_IMAGE_EXTS
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 DATA_DIR = os.path.join(BASE_DIR, "data")
@@ -62,7 +61,8 @@ DEMO_CERTS = {
             "file_path": "",
             "file_size": 0,
         },
-    ]
+    ],
+    "categories": []
 }
 
 
@@ -70,27 +70,39 @@ def load_certs():
     if os.path.exists(CERTS_FILE):
         try:
             with open(CERTS_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
+                data = json.load(f)
+                # 确保 categories 字段存在
+                if "categories" not in data:
+                    data["categories"] = []
+                return data
         except Exception:
             pass
     return DEMO_CERTS
 
 
 def save_certs(data):
+    # 确保 categories 字段存在
+    if "categories" not in data:
+        data["categories"] = []
     with open(CERTS_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
 
-def build_category_tree(certs_list):
-    """从证书列表中提取分类目录树"""
+def build_category_tree(data):
+    """从证书列表和预设分类中提取分类目录树"""
     from collections import defaultdict
+    certs_list = data.get("certs", [])
     cats = defaultdict(list)
     for c in certs_list:
         cat = c.get("category", "未分类") or "未分类"
         cats[cat].append(c)
+    
+    # 获取预设的空分类（没有证书的分类）
+    preset_categories = data.get("categories", [])
+    
     result = []
+    # 处理有证书的分类
     for cat_name, items in sorted(cats.items()):
-        # 统计各状态数量
         valid_count = sum(1 for c in items if c.get("status") == "valid")
         expired_count = sum(1 for c in items if c.get("status") == "expired")
         result.append({
@@ -99,6 +111,20 @@ def build_category_tree(certs_list):
             "valid_count": valid_count,
             "expired_count": expired_count,
         })
+    
+    # 处理空分类（没有证书的预设分类）
+    existing_names = {c["name"] for c in result}
+    for preset_cat in preset_categories:
+        if preset_cat not in existing_names:
+            result.append({
+                "name": preset_cat,
+                "count": 0,
+                "valid_count": 0,
+                "expired_count": 0,
+            })
+    
+    # 按名称排序
+    result.sort(key=lambda x: x["name"])
     return result
 
 
@@ -153,20 +179,47 @@ def update_cert(cert_id):
 def delete_cert(cert_id):
     data = load_certs()
     cert = next((c for c in data["certs"] if c["id"] == cert_id), None)
-    if cert:
-        # 删除关联的文件
-        file_path = cert.get("file_path", "")
-        if file_path and os.path.exists(file_path):
+    if not cert:
+        return jsonify({"success": False, "message": "证书不存在"}), 404
+
+    errors = []
+
+    # 1. 删除关联的文件
+    file_path = cert.get("file_path", "")
+    if file_path:
+        if os.path.exists(file_path):
             try:
                 os.remove(file_path)
-            except Exception:
-                pass
+            except Exception as e:
+                errors.append(f"删除文件失败: {str(e)}")
+        
+        # 检查并删除空的上传目录
+        try:
+            upload_dir = os.path.dirname(file_path)
+            if os.path.exists(upload_dir) and not os.listdir(upload_dir):
+                os.rmdir(upload_dir)
+        except Exception:
+            pass
+
+    # 2. 从证书列表中移除
     data["certs"] = [c for c in data["certs"] if c["id"] != cert_id]
+
+    # 3. 检查是否有空的分类需要清理
+    used_categories = set(c.get("category", "未分类") for c in data["certs"])
+    if "categories" in data:
+        new_categories = [cat for cat in data["categories"] 
+                         if cat in used_categories or cat == "未分类"]
+        data["categories"] = new_categories
+
     save_certs(data)
-    return jsonify({"success": True})
+
+    result = {"success": True}
+    if errors:
+        result["warnings"] = errors
+    return jsonify(result)
 
 
-# ──────────────────────── 文件下载 ──────────────────────────────
+# ──────────────────────── 文件下载与预览 ──────────────────────────────
 
 @certs_bp.route("/api/certs/<cert_id>/download", methods=["GET"])
 def download_cert_file(cert_id):
@@ -191,19 +244,36 @@ def download_cert_file(cert_id):
     )
 
 
+@certs_bp.route("/api/certs/file/<path:file_path>", methods=["GET"])
+def preview_cert_file(file_path):
+    """根据文件路径直接访问文件（用于图片预览）"""
+    # 安全检查：确保文件在 CERT_FILES_DIR 目录下
+    full_path = os.path.join(CERT_FILES_DIR, file_path)
+    if not os.path.exists(full_path):
+        return jsonify({"success": False, "message": "文件不存在"}), 404
+
+    # 检查文件类型
+    ext = os.path.splitext(full_path)[1].lower()
+    image_exts = {'.jpg', '.jpeg', '.png', '.bmp', '.webp'}
+    if ext not in image_exts:
+        return jsonify({"success": False, "message": "该文件类型不支持预览"}), 400
+
+    return send_file(full_path)
+
+
 # ──────────────────────── 分类目录树 ────────────────────────────
 
 @certs_bp.route("/api/certs/categories", methods=["GET"])
 def list_categories():
     """返回证书分类目录树（含各分类下证书数量）"""
     data = load_certs()
-    tree = build_category_tree(data.get("certs", []))
+    tree = build_category_tree(data)
     return jsonify({"categories": tree})
 
 
 @certs_bp.route("/api/certs/categories", methods=["POST"])
 def create_category():
-    """创建新分类（只是占位，实际上分类在添加证书时使用）"""
+    """创建新分类并保存到预设分类列表"""
     body = request.get_json(silent=True) or {}
     name = body.get("name", "").strip()
     if not name:
@@ -211,18 +281,23 @@ def create_category():
 
     # 检查是否已存在同名分类
     data = load_certs()
-    existing = build_category_tree(data.get("certs", []))
+    existing = build_category_tree(data)
     if any(c["name"] == name for c in existing):
         return jsonify({"success": False, "message": "分类已存在"}), 400
 
-    # 创建一个空分类（在分类列表中可见，但无证书时也会显示）
-    # 暂时不需要额外存储，分类由证书的 category 字段驱动
+    # 将新分类保存到预设分类列表
+    if "categories" not in data:
+        data["categories"] = []
+    if name not in data["categories"]:
+        data["categories"].append(name)
+    save_certs(data)
+    
     return jsonify({"success": True, "category": {"name": name, "count": 0}})
 
 
 @certs_bp.route("/api/certs/categories/<path:cat_name>", methods=["PUT"])
 def rename_category(cat_name):
-    """重命名分类 — 更新该分类下所有证书的 category 字段"""
+    """重命名分类 — 更新该分类下所有证书的 category 字段，以及预设分类列表"""
     body = request.get_json(silent=True) or {}
     new_name = body.get("name", "").strip()
     if not new_name:
@@ -230,21 +305,36 @@ def rename_category(cat_name):
 
     data = load_certs()
     updated = 0
+    
+    # 更新证书中的分类名
     for c in data["certs"]:
         if c.get("category", "未分类") == cat_name:
             c["category"] = new_name
             updated += 1
+    
+    # 更新预设分类列表中的名称
+    if "categories" in data and cat_name in data["categories"]:
+        idx = data["categories"].index(cat_name)
+        data["categories"][idx] = new_name
+    
     save_certs(data)
     return jsonify({"success": True, "updated": updated})
 
 
 @certs_bp.route("/api/certs/categories/<path:cat_name>", methods=["DELETE"])
 def delete_category(cat_name):
-    """删除分类 — 将该分类下所有证书移到「未分类」"""
+    """删除分类 — 将该分类下所有证书移到「未分类」，并从预设列表中删除"""
     data = load_certs()
+    
+    # 将证书移到未分类
     for c in data["certs"]:
         if c.get("category", "未分类") == cat_name:
             c["category"] = "未分类"
+    
+    # 从预设分类列表中删除
+    if "categories" in data and cat_name in data["categories"]:
+        data["categories"].remove(cat_name)
+    
     save_certs(data)
     return jsonify({"success": True})
 
@@ -253,7 +343,7 @@ def delete_category(cat_name):
 
 @certs_bp.route("/api/certs/ocr", methods=["POST"])
 def ocr_cert():
-    """上传证书图片或 PDF，AI 识别后保存文件并返回结构化信息"""
+    """上传证书图片，AI 识别后保存文件并返回结构化信息"""
     if "file" not in request.files:
         return jsonify({"success": False, "message": "请上传文件"}), 400
 
@@ -263,9 +353,8 @@ def ocr_cert():
 
     ext = os.path.splitext(file.filename)[1].lower()
     if ext not in ALLOWED_EXTS:
-        return jsonify({"success": False, "message": f"不支持的文件类型：{ext}，请上传图片（jpg/png/bmp）或 PDF"}), 400
+        return jsonify({"success": False, "message": f"不支持的文件类型：{ext}，请上传图片（jpg/png/bmp/webp）"}), 400
 
-    is_image = ext in ALLOWED_IMAGE_EXTS
     file_data = file.read()
 
     # ── 保存文件到磁盘 ──
@@ -277,35 +366,9 @@ def ocr_cert():
     file_size = os.path.getsize(saved_path)
 
     try:
-        if is_image:
-            from backend.llm_client import extract_cert_from_image
-            result = extract_cert_from_image(file_data)
-        else:
-            import pdfplumber
-            from backend.llm_client import extract_cert_from_text
-
-            with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
-                tmp.write(file_data)
-                tmp_path = tmp.name
-
-            try:
-                text_parts = []
-                with pdfplumber.open(tmp_path) as pdf:
-                    for page in pdf.pages:
-                        t = page.extract_text()
-                        if t:
-                            text_parts.append(t)
-                full_text = "\n".join(text_parts)
-            finally:
-                os.unlink(tmp_path)
-
-            if not full_text.strip():
-                return jsonify({
-                    "success": False,
-                    "message": "PDF 中未提取到文字，请尝试上传图片格式（jpg/png）并使用支持视觉的大模型",
-                }), 400
-
-            result = extract_cert_from_text(full_text)
+        # 直接将图片传给大模型识别
+        from backend.llm_client import extract_cert_from_image
+        result = extract_cert_from_image(file_data)
 
         # 返回识别结果 + 文件信息
         return jsonify({

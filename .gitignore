@@ -39,3 +39,6 @@ dist/
 
 # Markitdown cache
 .markitdown/
+
+# Design docs (optional)
+2026-06-08-bidding-info-extraction-design.md

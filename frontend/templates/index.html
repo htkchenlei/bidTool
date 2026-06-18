@@ -501,7 +501,7 @@
 
             <!-- 添加分类弹窗 -->
             <Transition name="fade">
-              <div v-if="showAddCertCat" class="modal-overlay" @click.self="showAddCertCat = false">
+              <div v-if="showAddCertCat" class="modal-overlay">
                 <div class="modal modal--sm">
                   <div class="modal-header"><h3>添加分类</h3><button class="modal-close" @click="showAddCertCat = false"><svg width="16" height="16" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" stroke-width="2"/><line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" stroke-width="2"/></svg></button></div>
                   <div class="modal-body">
@@ -517,7 +517,7 @@
 
             <!-- 重命名分类弹窗 -->
             <Transition name="fade">
-              <div v-if="renameCertCatTarget" class="modal-overlay" @click.self="renameCertCatTarget = null">
+              <div v-if="renameCertCatTarget" class="modal-overlay">
                 <div class="modal modal--sm">
                   <div class="modal-header"><h3>重命名分类</h3><button class="modal-close" @click="renameCertCatTarget = null"><svg width="16" height="16" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" stroke-width="2"/><line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" stroke-width="2"/></svg></button></div>
                   <div class="modal-body">
@@ -580,6 +580,12 @@
                     {{ cert.file_name }}
                   </span>
                   <div class="cert-card-actions">
+                    <button v-if="cert.file_path" class="icon-btn icon-btn--success" @click="previewCert(cert)" title="预览证书">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/></svg>
+                    </button>
+                    <button class="icon-btn icon-btn--warning" @click="openEditCert(cert)" title="编辑">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    </button>
                     <button v-if="cert.file_path" class="icon-btn icon-btn--primary" @click="downloadCertFile(cert)" title="下载文件">
                       <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><polyline points="7,10 12,15 17,10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><line x1="12" y1="15" x2="12" y2="3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
                     </button>
@@ -728,7 +734,7 @@
         </div>
 
         <!-- 详情弹窗 -->
-        <div class="modal-overlay" v-if="bidDetailVisible" @click.self="bidDetailVisible = false">
+        <div class="modal-overlay" v-if="bidDetailVisible">
           <div class="modal modal--bid-detail">
             <div class="modal-header">
               <h3>招标详情</h3>
@@ -967,7 +973,7 @@
         </div>
 
         <!-- 新建报价弹窗 -->
-        <div class="modal-overlay" v-if="showNewPricing" @click.self="showNewPricing = false">
+        <div class="modal-overlay" v-if="showNewPricing">
           <div class="modal modal--sm">
             <div class="modal-header">
               <h3>新建报价项目</h3>
@@ -991,7 +997,7 @@
         </div>
 
         <!-- 添加成本项弹窗 -->
-        <div class="modal-overlay" v-if="showAddPricingItem" @click.self="showAddPricingItem = false">
+        <div class="modal-overlay" v-if="showAddPricingItem">
           <div class="modal">
             <div class="modal-header">
               <h3>添加成本项</h3>
@@ -1179,7 +1185,7 @@
 
         <!-- 新建自定义模型模态框 -->
         <Transition name="fade">
-          <div v-if="showNewModelModal" class="modal-overlay" @click.self="showNewModelModal = false">
+          <div v-if="showNewModelModal" class="modal-overlay">
             <div class="modal" style="width: 520px;">
               <div class="modal-header">
                 <h3>新建自定义模型</h3>
@@ -1269,7 +1275,7 @@
 
   <!-- 新建文件夹弹窗（置于 #app 顶层，确保遮罩覆盖全局） -->
   <Transition name="fade">
-    <div v-if="showNewFolder" class="modal-overlay" @click.self="showNewFolder = false">
+    <div v-if="showNewFolder" class="modal-overlay">
       <div class="modal folder-modal">
         <div class="modal-header folder-modal-header">
           <div class="folder-modal-title">
@@ -1312,7 +1318,7 @@
 
   <!-- 新建项目弹窗 -->
   <Transition name="fade">
-    <div v-if="showNewProject" class="modal-overlay" @click.self="cancelNewProject">
+    <div v-if="showNewProject" class="modal-overlay">
       <div class="modal" style="width:560px">
         <div class="modal-header">
           <h3>新建招标项目</h3>
@@ -1386,7 +1392,7 @@
 
   <!-- 添加证书弹窗（置于 #app 顶层，确保遮罩覆盖全局） -->
   <Transition name="fade">
-    <div v-if="showAddCert" class="modal-overlay" @click.self="closeAddCert">
+    <div v-if="showAddCert" class="modal-overlay">
       <div class="modal folder-modal" style="width:500px">
         <div class="modal-header folder-modal-header">
           <div class="folder-modal-title">
@@ -1444,13 +1450,75 @@
           <div class="form-divider"></div>
 
           <div class="form-group"><label class="form-label">证书名称</label><input type="text" class="form-input form-input--lg" v-model="newCert.name" placeholder="证书全称" /></div>
-          <div class="form-group"><label class="form-label">证书类型</label><input type="text" class="form-input form-input--lg" v-model="newCert.type" placeholder="例：施工资质、管理体系" /></div>
+          <div class="form-group"><label class="form-label">证书类型</label>
+            <select class="form-input form-input--lg" v-model="newCert.category">
+              <option value="">请选择证书分类</option>
+              <option v-for="cat in certCategories" :key="cat.name" :value="cat.name">{{ cat.name }}</option>
+            </select>
+          </div>
           <div class="form-group"><label class="form-label">颁发机构</label><input type="text" class="form-input form-input--lg" v-model="newCert.issuer" placeholder="颁发机构名称" /></div>
           <div class="form-group"><label class="form-label">到期日期</label><input type="date" class="form-input form-input--lg" v-model="newCert.expire" /></div>
         </div>
         <div class="modal-footer">
           <button class="btn btn--ghost" @click="closeAddCert">取消</button>
           <button class="btn btn--primary" @click="addCert" :disabled="!newCert.name">确认添加</button>
+        </div>
+      </div>
+    </div>
+  </Transition>
+
+  <!-- 编辑证书弹窗 -->
+  <Transition name="fade">
+    <div v-if="showEditCert" class="modal-overlay">
+      <div class="modal folder-modal" style="width:500px">
+        <div class="modal-header folder-modal-header">
+          <div class="folder-modal-title">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <h3>编辑证书</h3>
+          </div>
+          <button class="modal-close" @click="closeEditCert">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          </button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group"><label class="form-label">证书名称</label><input type="text" class="form-input form-input--lg" v-model="editCert.name" placeholder="证书全称" /></div>
+          <div class="form-group"><label class="form-label">证书类型</label>
+            <select class="form-input form-input--lg" v-model="editCert.category">
+              <option value="">请选择证书分类</option>
+              <option v-for="cat in certCategories" :key="cat.name" :value="cat.name">{{ cat.name }}</option>
+            </select>
+          </div>
+          <div class="form-group"><label class="form-label">颁发机构</label><input type="text" class="form-input form-input--lg" v-model="editCert.issuer" placeholder="颁发机构名称" /></div>
+          <div class="form-group"><label class="form-label">到期日期</label><input type="date" class="form-input form-input--lg" v-model="editCert.expire" /></div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn--ghost" @click="closeEditCert">取消</button>
+          <button class="btn btn--primary" @click="saveEditCert" :disabled="!editCert.name">保存修改</button>
+        </div>
+      </div>
+    </div>
+  </Transition>
+
+  <!-- 预览证书弹窗 -->
+  <Transition name="fade">
+    <div v-if="showPreviewCert" class="modal-overlay">
+      <div class="modal" style="width:700px;max-height:85vh">
+        <div class="modal-header">
+          <h3>证书预览</h3>
+          <button class="modal-close" @click="showPreviewCert = false">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          </button>
+        </div>
+        <div class="modal-body" style="max-height:60vh;overflow:auto;text-align:center">
+          <img v-if="previewCertUrl" :src="previewCertUrl" style="max-width:100%;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.1)" alt="证书预览" />
+          <div v-else style="padding:40px;color:#999">无法预览此文件</div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn--ghost" @click="showPreviewCert = false">关闭</button>
+          <button v-if="currentPreviewCert?.file_path" class="btn btn--primary" @click="downloadCertFile(currentPreviewCert)">下载文件</button>
         </div>
       </div>
     </div>

@@ -632,6 +632,22 @@ createApp({
     const certUploadDragover = ref(false);
     const certUploadedFile = ref(null);
 
+    // 编辑证书
+    const showEditCert = ref(false);
+    const editCert = reactive({ id: '', name: '', category: '', issuer: '', expire: '', file_path: '' });
+
+    // 预览证书
+    const showPreviewCert = ref(false);
+    const currentPreviewCert = ref(null);
+    const previewCertUrl = computed(() => {
+      if (!currentPreviewCert.value?.file_path) return '';
+      const ext = currentPreviewCert.value.file_path.split('.').pop().toLowerCase();
+      if (['jpg', 'jpeg', 'png', 'bmp', 'webp'].includes(ext)) {
+        return `/api/certs/file/${encodeURIComponent(currentPreviewCert.value.file_path)}`;
+      }
+      return '';
+    });
+
     // 分类管理
     const showAddCertCat = ref(false);
     const newCertCatName = ref('');
@@ -764,6 +780,46 @@ createApp({
       if (cert.id) {
         window.open(`/api/certs/${cert.id}/download`, '_blank');
       }
+    };
+
+    // 编辑证书
+    const openEditCert = (cert) => {
+      Object.assign(editCert, {
+        id: cert.id,
+        name: cert.name || '',
+        category: cert.category || '',
+        issuer: cert.issuer || '',
+        expire: cert.expire || '',
+        file_path: cert.file_path || '',
+      });
+      showEditCert.value = true;
+    };
+
+    const closeEditCert = () => {
+      showEditCert.value = false;
+    };
+
+    const saveEditCert = async () => {
+      if (!editCert.name) return;
+      const body = {
+        name: editCert.name,
+        category: editCert.category,
+        issuer: editCert.issuer,
+        expire: editCert.expire,
+      };
+      await fetch(`/api/certs/${editCert.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      showEditCert.value = false;
+      await loadAllCertsData();
+    };
+
+    // 预览证书
+    const previewCert = (cert) => {
+      currentPreviewCert.value = cert;
+      showPreviewCert.value = true;
     };
 
     const addCertCategory = async () => {
@@ -1370,6 +1426,8 @@ createApp({
       triggerCertFileInput, uploadCertFileAndRecognize,
       handleCertFileChange, handleCertFileDrop,
       addCert, deleteCert, downloadCertFile,
+      showEditCert, editCert, openEditCert, closeEditCert, saveEditCert,
+      showPreviewCert, currentPreviewCert, previewCert, previewCertUrl,
       addCertCategory, startRenameCat, doRenameCat, deleteCertCat,
       getCertStatusClass, getCertStatusLabel,
       fileCount, analysisCount, certCount, expiringSoon, expiringSoonCount,
