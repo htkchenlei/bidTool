@@ -211,6 +211,7 @@ createApp({
         const res = await fetch(`/api/projects?${params.toString()}`);
         const data = await res.json();
         projects.value = data.projects || [];
+        await loadStats();
       } catch {}
     };
 
@@ -768,12 +769,14 @@ createApp({
       resetCertForm();
       showAddCert.value = false;
       await loadAllCertsData();
+      await loadStats();
     };
 
     const deleteCert = async (id) => {
       if (!confirm('确认删除该证书？关联文件也将被删除。')) return;
       await fetch(`/api/certs/${id}`, { method: 'DELETE' });
       await loadAllCertsData();
+      await loadStats();
     };
 
     const downloadCertFile = (cert) => {
@@ -814,6 +817,7 @@ createApp({
       });
       showEditCert.value = false;
       await loadAllCertsData();
+      await loadStats();
     };
 
     // 预览证书
@@ -884,20 +888,20 @@ createApp({
     };
 
     // ── 仪表盘统计 ──────────────────────────────────────────
-    const fileCount = computed(() => files.value.length);
-    const analysisCount = computed(() => analysisRecords.value.length);
-    const certCount = computed(() => certs.value.length);
+    const stats = ref({ total_files: 0, analyzed_projects: 0, total_certs: 0, expiring_soon: 0 });
 
-    const expiringSoon = computed(() => {
-      return certs.value.filter(c => {
-        if (c.status === 'expired') return true;
-        if (!c.expire) return false;
-        const diff = (new Date(c.expire) - new Date()) / (1000 * 86400);
-        return diff < 90;
-      });
-    });
+    const loadStats = async () => {
+      try {
+        const res = await fetch('/api/stats');
+        const data = await res.json();
+        stats.value = data;
+      } catch {}
+    };
 
-    const expiringSoonCount = computed(() => expiringSoon.value.length);
+    const fileCount = computed(() => stats.value.total_files || 0);
+    const analysisCount = computed(() => stats.value.analyzed_projects || 0);
+    const certCount = computed(() => stats.value.total_certs || 0);
+    const expiringSoonCount = computed(() => stats.value.expiring_soon || 0);
 
     // ── 区域查询 ────────────────────────────────────────────
     const regions = ref([]);
@@ -1387,7 +1391,7 @@ createApp({
 
     // ── 初始化 ───────────────────────────────────────────────
     onMounted(async () => {
-      await Promise.all([loadFiles(), loadAnalysis(), loadAllCertsData(), loadConfig(), loadRegions(), loadBidding(), loadBiddingStats(), loadPricingProjects()]);
+      await Promise.all([loadFiles(), loadAnalysis(), loadAllCertsData(), loadConfig(), loadRegions(), loadBidding(), loadBiddingStats(), loadPricingProjects(), loadStats(), loadProjects()]);
     });
 
     // ── 区域筛选器变化监听 ─────────────────────────────────
@@ -1430,7 +1434,7 @@ createApp({
       showPreviewCert, currentPreviewCert, previewCert, previewCertUrl,
       addCertCategory, startRenameCat, doRenameCat, deleteCertCat,
       getCertStatusClass, getCertStatusLabel,
-      fileCount, analysisCount, certCount, expiringSoon, expiringSoonCount,
+      fileCount, analysisCount, certCount, expiringSoonCount, loadStats, stats,
       modelConfigs, activeModel, activeModelInfo, savedActiveModel, savedActiveModelInfo, saving, saveSettings, toastVisible, showKey, toggleKeyVisibility,
       testingModel, testResults, testModel,
       showNewModelModal, newModelForm, newModelTesting, newModelTestResult, newModelCreating,

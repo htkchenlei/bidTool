@@ -235,6 +235,50 @@ def list_projects():
     return jsonify({"projects": filtered, "total": len(filtered)})
 
 
+@projects_bp.route("/api/stats", methods=["GET"])
+def get_stats():
+    """获取工作台统计数据"""
+    projects = load_projects()
+    project_files = load_project_files()
+    extracted_fields = load_extracted_fields()
+    risk_items = load_risk_items()
+
+    # 统计项目文件总数
+    total_files = len(project_files)
+
+    # 统计已分析项目数
+    analyzed_projects = len(set(pf.get("project_id") for pf in project_files))
+
+    # 统计资质证书数
+    certs_data = _load_json(os.path.join(DATA_DIR, "certs.json"), {"certs": []})
+    total_certs = len(certs_data.get("certs", []))
+
+    # 统计即将到期的证书（90天内）
+    expiring_soon = 0
+    today = datetime.now()
+    for cert in certs_data.get("certs", []):
+        expire = cert.get("expire", "")
+        status = cert.get("status", "")
+        if status == "expired":
+            continue
+        if not expire:
+            continue
+        try:
+            expire_date = datetime.strptime(expire, "%Y-%m-%d")
+            diff = (expire_date - today).days
+            if 0 <= diff <= 90:
+                expiring_soon += 1
+        except ValueError:
+            pass
+
+    return jsonify({
+        "total_files": total_files,
+        "analyzed_projects": analyzed_projects,
+        "total_certs": total_certs,
+        "expiring_soon": expiring_soon
+    })
+
+
 @projects_bp.route("/api/projects/fetch-url", methods=["POST"])
 def fetch_announcement_url():
     """抓取公告网页内容（使用 Scrapling 作为 HTTP 爬虫引擎）"""
