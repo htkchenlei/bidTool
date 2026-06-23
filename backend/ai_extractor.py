@@ -53,11 +53,9 @@ FIELD_EXTRACTION_PROMPT = """你是一个专业的招标文件信息提取助手
 24. 投标截止时间 (bid_deadline)
 25. 开标时间 (opening_time)
 26. 报名地点或平台 (register_location)
-27. 文件获取地点或平台 (doc_get_location)
-28. 投标文件递交地点或平台 (submit_location)
-29. 开标地点或平台 (opening_location)
-30. 系统建设内容 (system_content)
-31. 软件功能模块 (software_modules)
+27. 投标文件递交地点或平台 (submit_location)
+28. 开标地点或平台 (opening_location)
+29. 所属行业 (industry)
 
 请以严格的 JSON 格式返回，格式如下：
 {
@@ -335,8 +333,8 @@ def _parse_json_response(response):
         "control_price", "bid_bond_amount", "performance_bond",
         "announce_date", "register_start", "register_end", "clarify_end",
         "bond_deadline", "bid_deadline", "opening_time",
-        "register_location", "doc_get_location", "submit_location",
-        "opening_location", "system_content", "software_modules",
+        "register_location", "submit_location",
+        "opening_location", "industry",
     ]
 
     result = {}

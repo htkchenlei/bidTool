@@ -10,3 +10,5 @@ beautifulsoup4>=4.12
 scrapling>=0.4
 browserforge>=1.0
 markitdown>=0.1.0
+PyPDF2>=3.0
+reportlab>=4.0

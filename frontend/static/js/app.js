@@ -496,6 +496,12 @@ createApp({
       } catch {}
     };
 
+    const isUrlField = (field) => {
+      const val = field.machine_value || field.confirmed_value || '';
+      if (!val || typeof val !== 'string') return false;
+      return /^https?:\/\//i.test(val.trim());
+    };
+
     const copyFieldValue = async (field) => {
       const value = field.machine_value || '';
       try {
@@ -545,6 +551,16 @@ createApp({
         window.open(`/api/projects/${currentProject.value.id}/export/risks`, '_blank');
       }
     };
+
+    const currentProjectAnnouncementUrl = computed(() => {
+      const f = currentProjectFields.value.find(f => f.field_key === 'announcement_url');
+      if (!f) return '';
+      return f.machine_value || f.confirmed_value || '';
+    });
+
+    const displayFields = computed(() => {
+      return currentProjectFields.value.filter(f => f.field_key !== 'announcement_url');
+    });
 
     const fieldReviewStats = computed(() => {
       const fields = currentProjectFields.value;
@@ -890,6 +906,217 @@ createApp({
     // ── 仪表盘统计 ──────────────────────────────────────────
     const stats = ref({ total_files: 0, analyzed_projects: 0, total_certs: 0, expiring_soon: 0 });
 
+    // ── 业绩管理 ────────────────────────────────────────────
+    const performances = ref([]);
+    const perfCategories = ref([]);
+    const perfSearchKeyword = ref('');
+    const perfFilterCategory = ref('');
+    const perfFilterDateFrom = ref('');
+    const perfFilterDateTo = ref('');
+    const perfSelectedIds = ref([]);
+    const showAddPerf = ref(false);
+    const showEditPerf = ref(false);
+    const showPerfWatermark = ref(false);
+    const perfWatermarkText = ref('');
+    const perfDownloadTarget = ref(null); // 'single' | 'batch'
+    const perfDownloadPerfId = ref(null);
+    const newPerf = reactive({ project_name: '', party_b: '', date: '', category: '', amount: '', description: '' });
+    const newPerfNewCat = ref('');
+    const newPerfUploadedFile = ref(null);
+    const perfUploading = ref(false);
+    const perfUploadDragover = ref(false);
+    const perfFileInput = ref(null);
+    const editPerf = reactive({ id: '', project_name: '', party_b: '', date: '', category: '', amount: '', description: '', file_name: '', file_path: '' });
+
+    const filteredPerformances = computed(() => {
+      let result = performances.value;
+      if (perfSearchKeyword.value) {
+        const kw = perfSearchKeyword.value.toLowerCase();
+        result = result.filter(p => (p.project_name || '').toLowerCase().includes(kw)
+          || (p.party_b || '').toLowerCase().includes(kw)
+          || (p.description || '').toLowerCase().includes(kw));
+      }
+      return result;
+    });
+
+    const loadPerformances = async () => {
+      try {
+        const params = new URLSearchParams();
+        if (perfSearchKeyword.value) params.set('keyword', perfSearchKeyword.value);
+        if (perfFilterCategory.value) params.set('category', perfFilterCategory.value);
+        if (perfFilterDateFrom.value) params.set('date_from', perfFilterDateFrom.value);
+        if (perfFilterDateTo.value) params.set('date_to', perfFilterDateTo.value);
+        const res = await fetch(`/api/performances?${params.toString()}`);
+        const data = await res.json();
+        performances.value = data.performances || [];
+      } catch {}
+    };
+
+    const loadPerfCategories = async () => {
+      try {
+        const res = await fetch('/api/performances/categories');
+        const data = await res.json();
+        perfCategories.value = data.categories || [];
+      } catch {}
+    };
+
+    const loadAllPerfData = async () => {
+      await Promise.all([loadPerformances(), loadPerfCategories()]);
+    };
+
+    const closeAddPerf = () => {
+      showAddPerf.value = false;
+      Object.assign(newPerf, { project_name: '', party_b: '', date: '', category: '', amount: '', description: '' });
+      newPerfNewCat.value = '';
+      newPerfUploadedFile.value = null;
+    };
+
+    const triggerPerfFileInput = () => {
+      if (!perfUploading.value) perfFileInput.value?.click();
+    };
+
+    const uploadPerfFile = async (file) => {
+      if (!file) return;
+      perfUploading.value = true;
+      try {
+        const form = new FormData();
+        form.append('file', file);
+        const res = await fetch('/api/performances/upload', { method: 'POST', body: form });
+        const data = await res.json();
+        if (data.success && data.file) {
+          newPerfUploadedFile.value = data.file;
+        } else {
+          alert(data.message || '上传失败');
+        }
+      } catch (e) {
+        alert('上传失败：服务未连接');
+      }
+      perfUploading.value = false;
+    };
+
+    const handlePerfFileChange = (e) => {
+      const file = e.target.files[0];
+      if (file) uploadPerfFile(file);
+      e.target.value = '';
+    };
+
+    const handlePerfFileDrop = (e) => {
+      perfUploadDragover.value = false;
+      const file = e.dataTransfer.files[0];
+      if (file) uploadPerfFile(file);
+    };
+
+    const addPerf = async () => {
+      if (!newPerf.project_name || !newPerf.party_b) return;
+      const body = {
+        project_name: newPerf.project_name,
+        party_b: newPerf.party_b,
+        date: newPerf.date,
+        category: newPerf.category === '__new__' ? newPerfNewCat.value.trim() : newPerf.category,
+        amount: newPerf.amount,
+        description: newPerf.description,
+      };
+      if (newPerfUploadedFile.value) {
+        body.file_name = newPerfUploadedFile.value.name;
+        body.file_path = newPerfUploadedFile.value.path;
+        body.file_size = newPerfUploadedFile.value.size;
+      }
+      if (!body.category) body.category = '未分类';
+      await fetch('/api/performances', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      closeAddPerf();
+      await loadAllPerfData();
+    };
+
+    const deletePerf = async (id) => {
+      if (!confirm('确认删除该业绩？关联的合同文件也将被删除。')) return;
+      await fetch(`/api/performances/${id}`, { method: 'DELETE' });
+      perfSelectedIds.value = perfSelectedIds.value.filter(i => i !== id);
+      await loadAllPerfData();
+    };
+
+    const openEditPerf = (perf) => {
+      Object.assign(editPerf, {
+        id: perf.id,
+        project_name: perf.project_name || '',
+        party_b: perf.party_b || '',
+        date: perf.date || '',
+        category: perf.category || '',
+        amount: perf.amount || '',
+        description: perf.description || '',
+        file_name: perf.file_name || '',
+        file_path: perf.file_path || '',
+      });
+      showEditPerf.value = true;
+    };
+
+    const saveEditPerf = async () => {
+      if (!editPerf.project_name) return;
+      await fetch(`/api/performances/${editPerf.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          project_name: editPerf.project_name,
+          party_b: editPerf.party_b,
+          date: editPerf.date,
+          category: editPerf.category,
+          amount: editPerf.amount,
+          description: editPerf.description,
+        }),
+      });
+      showEditPerf.value = false;
+      await loadAllPerfData();
+    };
+
+    const downloadPerfFile = (perf) => {
+      // 打开水印弹窗
+      perfDownloadTarget.value = 'single';
+      perfDownloadPerfId.value = perf.id;
+      perfWatermarkText.value = '';
+      showPerfWatermark.value = true;
+    };
+
+    const batchDownloadPerf = () => {
+      if (perfSelectedIds.value.length === 0) return;
+      perfDownloadTarget.value = 'batch';
+      perfWatermarkText.value = '';
+      showPerfWatermark.value = true;
+    };
+
+    const doDownloadPerfWithWatermark = () => {
+      const watermark = perfWatermarkText.value.trim();
+      if (perfDownloadTarget.value === 'single' && perfDownloadPerfId.value) {
+        const url = `/api/performances/${perfDownloadPerfId.value}/download${watermark ? '?watermark=' + encodeURIComponent(watermark) : ''}`;
+        window.open(url, '_blank');
+      } else if (perfDownloadTarget.value === 'batch') {
+        // 批量下载使用 POST
+        fetch('/api/performances/batch-download', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ids: perfSelectedIds.value, watermark }),
+        }).then(res => res.blob()).then(blob => {
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = '业绩文件.zip';
+          a.click();
+          URL.revokeObjectURL(url);
+        }).catch(() => alert('批量下载失败'));
+      }
+      showPerfWatermark.value = false;
+    };
+
+    const toggleAllPerfSelect = (e) => {
+      if (e.target.checked) {
+        perfSelectedIds.value = filteredPerformances.value.map(p => p.id);
+      } else {
+        perfSelectedIds.value = [];
+      }
+    };
+
     const loadStats = async () => {
       try {
         const res = await fetch('/api/stats');
@@ -902,6 +1129,18 @@ createApp({
     const analysisCount = computed(() => stats.value.analyzed_projects || 0);
     const certCount = computed(() => stats.value.total_certs || 0);
     const expiringSoonCount = computed(() => stats.value.expiring_soon || 0);
+    const perfCount = computed(() => performances.value.filter(p => p.file_path).length);
+
+    // 返回即将到期的证书列表（用于模板渲染）
+    const expiringSoon = computed(() => {
+      const now = new Date();
+      return certs.value.filter(cert => {
+        if (cert.status === 'expired') return false;
+        if (!cert.expire) return false;
+        const diff = (new Date(cert.expire) - now) / (1000 * 86400);
+        return diff >= 0 && diff < 90;
+      }).slice(0, 5);
+    });
 
     // ── 区域查询 ────────────────────────────────────────────
     const regions = ref([]);
@@ -1391,7 +1630,7 @@ createApp({
 
     // ── 初始化 ───────────────────────────────────────────────
     onMounted(async () => {
-      await Promise.all([loadFiles(), loadAnalysis(), loadAllCertsData(), loadConfig(), loadRegions(), loadBidding(), loadBiddingStats(), loadPricingProjects(), loadStats(), loadProjects()]);
+      await Promise.all([loadFiles(), loadAnalysis(), loadAllCertsData(), loadConfig(), loadRegions(), loadBidding(), loadBiddingStats(), loadPricingProjects(), loadStats(), loadProjects(), loadAllPerfData()]);
     });
 
     // ── 区域筛选器变化监听 ─────────────────────────────────
@@ -1407,6 +1646,7 @@ createApp({
       deleteFile, deleteFolder, formatSize, formatDate, getFileEmoji,
       // 项目管理
       projects, currentProject, projectFiles, currentProjectFields, currentProjectRisks,
+      currentProjectAnnouncementUrl, displayFields,
       projectTab, projectSearchKeyword, showNewProject, newProject, extracting,
       editingField, fieldEditValue,
       newProjectFiles, newProjectFilesInput, newProjectUploadDragover,
@@ -1433,8 +1673,8 @@ createApp({
       showEditCert, editCert, openEditCert, closeEditCert, saveEditCert,
       showPreviewCert, currentPreviewCert, previewCert, previewCertUrl,
       addCertCategory, startRenameCat, doRenameCat, deleteCertCat,
-      getCertStatusClass, getCertStatusLabel,
-      fileCount, analysisCount, certCount, expiringSoonCount, loadStats, stats,
+      getCertStatusClass, getCertStatusLabel, isUrlField,
+      fileCount, analysisCount, certCount, perfCount, loadStats, stats, expiringSoon,
       modelConfigs, activeModel, activeModelInfo, savedActiveModel, savedActiveModelInfo, saving, saveSettings, toastVisible, showKey, toggleKeyVisibility,
       testingModel, testResults, testModel,
       showNewModelModal, newModelForm, newModelTesting, newModelTestResult, newModelCreating,
@@ -1454,6 +1694,16 @@ createApp({
       startNewPricing, createPricingProject, selectPricingProject, deletePricingProject,
       savePricingMeta, savePricingMetaDebounced, openAddItem, addPricingItem,
       saveItem, deleteItem, formatPricingNum,
+      // 业绩管理
+      performances, perfCategories, perfSearchKeyword, perfFilterCategory,
+      perfFilterDateFrom, perfFilterDateTo, perfSelectedIds, filteredPerformances,
+      showAddPerf, showEditPerf, showPerfWatermark, perfWatermarkText,
+      newPerf, newPerfNewCat, newPerfUploadedFile, perfUploading, perfUploadDragover,
+      perfFileInput, editPerf,
+      loadPerformances, loadAllPerfData, closeAddPerf, triggerPerfFileInput,
+      handlePerfFileChange, handlePerfFileDrop, addPerf, deletePerf,
+      openEditPerf, saveEditPerf, downloadPerfFile, batchDownloadPerf,
+      doDownloadPerfWithWatermark, toggleAllPerfSelect,
     };
   },
 }).mount('#app');

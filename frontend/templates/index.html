@@ -135,11 +135,11 @@
           </div>
           <div class="stat-card stat-card--peach">
             <div class="stat-icon">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/><polyline points="12,6 12,12 16,14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 2l3 6 6.5 1-4.7 4.6 1.1 6.4L12 17.5 6.1 20l1.1-6.4L2.5 9 9 8z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
             </div>
             <div class="stat-info">
-              <div class="stat-value">{{ expiringSoonCount }}</div>
-              <div class="stat-label">即将到期</div>
+              <div class="stat-value">{{ perfCount }}</div>
+              <div class="stat-label">业绩数量</div>
             </div>
           </div>
         </div>
@@ -337,9 +337,9 @@
                   </td>
                   <td>
                     <div style="display:flex;gap:8px;align-items:center;justify-content:flex-start">
-                      <button v-if="proj.status !== 'completed'" class="btn btn--primary btn--sm" @click.stop="analyzeProject(proj.id)" :disabled="analyzingProjects[proj.id]">
-                        <svg v-if="analyzingProjects[proj.id]" class="spinner" width="12" height="12" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2" stroke-dasharray="31.4 31.4" stroke-linecap="round"/></svg>
-                        <span v-else>开始分析</span>
+                      <button v-if="proj.status !== 'completed'" class="btn btn--primary btn--sm" @click.stop="analyzeProject(proj.id)" :disabled="analyzingProjects[proj.id] || proj.status === 'analyzing'">
+                        <svg v-if="analyzingProjects[proj.id] || proj.status === 'analyzing'" class="spinner" width="12" height="12" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2" stroke-dasharray="31.4 31.4" stroke-linecap="round"/></svg>
+                        <span v-else>{{ proj.status === 'analyzing' ? '分析中...' : '开始分析' }}</span>
                       </button>
                       <button v-if="proj.status === 'completed'" class="btn btn--outline btn--sm" @click.stop="openProject(proj.id)">
                         查看结果
@@ -392,18 +392,25 @@
 
           <!-- 字段复核标签 -->
           <div v-if="projectTab === 'fields'" class="project-tab-content">
+            <div v-if="currentProjectAnnouncementUrl" class="announcement-url-bar">
+              <span class="announcement-url-label">公告地址：</span>
+              <a :href="currentProjectAnnouncementUrl" target="_blank" rel="noopener noreferrer" class="announcement-url-link">{{ currentProjectAnnouncementUrl }}</a>
+            </div>
             <div class="field-review-stats">
-              <span>共 {{ currentProjectFields.length }} 个字段</span>
+              <span>共 {{ displayFields.length }} 个字段</span>
             </div>
             <div v-if="currentProjectFields.length === 0" class="empty-state">
               <p>暂无字段数据，请先上传文件并执行 AI 提取</p>
             </div>
             <div v-else class="field-cards">
-              <div v-for="field in currentProjectFields" :key="field.id" class="field-card">
+              <div v-for="field in displayFields" :key="field.id" class="field-card">
                 <div class="field-card-label">{{ field.field_label }}</div>
                 <div class="field-card-value-row">
                   <div v-if="editingField === field.id" class="field-card-edit">
                     <input class="field-card-input" v-model="fieldEditValue" @keyup.enter="saveFieldReview(field)" @keyup.esc="editingField = null" />
+                  </div>
+                  <div v-else-if="isUrlField(field)" class="field-card-value">
+                    <a :href="field.machine_value || field.confirmed_value" target="_blank" rel="noopener noreferrer" class="field-card-link">{{ field.machine_value || field.confirmed_value }}</a>
                   </div>
                   <div v-else class="field-card-value">{{ field.machine_value || '—' }}</div>
                   <div class="field-card-actions">
@@ -601,15 +608,108 @@
       </div>
 
       <!-- ▸ 业绩管理 -->
-      <div v-if="activeView === 'performance'" class="view-panel">
+      <div v-if="activeView === 'performance'" class="view-panel performance-view">
         <div class="page-header">
           <h1 class="page-title">业绩管理</h1>
-          <p class="page-subtitle">管理公司历史项目业绩，支持按类别、时间筛选</p>
+          <p class="page-subtitle">管理公司历史项目业绩，支持多字段筛选、批量下载与水印</p>
         </div>
-        <div class="empty-state">
+
+        <!-- 统计卡片 -->
+        <div class="perf-stats-row">
+          <div class="perf-stat-card">
+            <div class="perf-stat-num">{{ performances.length }}</div>
+            <div class="perf-stat-label">业绩总数</div>
+          </div>
+          <div class="perf-stat-card perf-stat-card--file">
+            <div class="perf-stat-num">{{ performances.filter(p => p.file_path).length }}</div>
+            <div class="perf-stat-label">已上传合同</div>
+          </div>
+          <div class="perf-stat-card perf-stat-card--cat">
+            <div class="perf-stat-num">{{ perfCategories.length }}</div>
+            <div class="perf-stat-label">业绩分类</div>
+          </div>
+        </div>
+
+        <!-- 工具栏：新建 + 筛选 -->
+        <div class="perf-toolbar">
+          <div class="perf-toolbar-left">
+            <button class="btn btn--primary" @click="showAddPerf = true">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><line x1="12" y1="5" x2="12" y2="19" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="5" y1="12" x2="19" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+              新建业绩
+            </button>
+            <button class="btn btn--outline" @click="batchDownloadPerf" :disabled="perfSelectedIds.length === 0">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><polyline points="7,10 12,15 17,10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><line x1="12" y1="15" x2="12" y2="3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+              批量下载 ({{ perfSelectedIds.length }})
+            </button>
+          </div>
+          <div class="perf-toolbar-right">
+            <div class="perf-search">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="8" stroke="currentColor" stroke-width="2"/><path d="m21 21-4.35-4.35" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+              <input type="text" v-model="perfSearchKeyword" placeholder="搜索项目名称、乙方..." @keyup.enter="loadPerformances" />
+            </div>
+            <select class="form-select form-select--sm" v-model="perfFilterCategory" @change="loadPerformances">
+              <option value="">全部分类</option>
+              <option v-for="cat in perfCategories" :key="cat" :value="cat">{{ cat }}</option>
+            </select>
+            <input type="date" class="form-select form-select--sm" v-model="perfFilterDateFrom" @change="loadPerformances" title="起始日期" />
+            <span style="color:var(--gray-400);font-size:12px">至</span>
+            <input type="date" class="form-select form-select--sm" v-model="perfFilterDateTo" @change="loadPerformances" title="截止日期" />
+          </div>
+        </div>
+
+        <!-- 空状态 -->
+        <div v-if="filteredPerformances.length === 0" class="empty-state">
           <svg width="48" height="48" viewBox="0 0 24 24" fill="none"><path d="M12 2l3 6 6.5 1-4.7 4.6 1.1 6.4L12 17.5 6.1 20l1.1-6.4L2.5 9 9 8z" stroke="#6b7280" stroke-width="1.5" stroke-linejoin="round"/></svg>
           <p class="empty-title">暂无业绩记录</p>
-          <p class="empty-desc">在这里记录您的历史项目业绩</p>
+          <p class="empty-desc">点击「新建业绩」添加您的第一条项目业绩</p>
+        </div>
+
+        <!-- 业绩列表 -->
+        <div v-else class="perf-table-wrap">
+          <table class="perf-table">
+            <thead>
+              <tr>
+                <th style="width:36px"><input type="checkbox" :checked="perfSelectedIds.length === filteredPerformances.length && filteredPerformances.length > 0" @change="toggleAllPerfSelect" /></th>
+                <th style="width:28%">项目名称</th>
+                <th style="width:16%">乙方名称</th>
+                <th style="width:10%">分类</th>
+                <th style="width:10%">日期</th>
+                <th style="width:10%">金额</th>
+                <th style="width:8%">合同</th>
+                <th style="width:18%">操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="perf in filteredPerformances" :key="perf.id" class="perf-row">
+                <td><input type="checkbox" :value="perf.id" v-model="perfSelectedIds" /></td>
+                <td>
+                  <div class="perf-project-name">{{ perf.project_name || '—' }}</div>
+                  <div class="perf-desc-hint" v-if="perf.description">{{ perf.description }}</div>
+                </td>
+                <td>{{ perf.party_b || '—' }}</td>
+                <td><span class="perf-cat-tag">{{ perf.category || '未分类' }}</span></td>
+                <td>{{ perf.date || '—' }}</td>
+                <td class="perf-amount">{{ perf.amount ? '¥' + perf.amount : '—' }}</td>
+                <td>
+                  <span v-if="perf.file_path" class="perf-file-badge">PDF</span>
+                  <span v-else style="color:var(--gray-300);font-size:12px">—</span>
+                </td>
+                <td>
+                  <div class="perf-actions">
+                    <button class="icon-btn icon-btn--warning" @click="openEditPerf(perf)" title="编辑">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    </button>
+                    <button v-if="perf.file_path" class="icon-btn icon-btn--primary" @click="downloadPerfFile(perf)" title="下载">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><polyline points="7,10 12,15 17,10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><line x1="12" y1="15" x2="12" y2="3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                    </button>
+                    <button class="icon-btn icon-btn--danger" @click="deletePerf(perf.id)" title="删除">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><polyline points="3,6 5,6 21,6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </div>
 
@@ -1519,6 +1619,194 @@
         <div class="modal-footer">
           <button class="btn btn--ghost" @click="showPreviewCert = false">关闭</button>
           <button v-if="currentPreviewCert?.file_path" class="btn btn--primary" @click="downloadCertFile(currentPreviewCert)">下载文件</button>
+        </div>
+      </div>
+    </div>
+  </Transition>
+
+  <!-- 新建业绩弹窗 -->
+  <Transition name="fade">
+    <div v-if="showAddPerf" class="modal-overlay">
+      <div class="modal folder-modal" style="width:540px">
+        <div class="modal-header folder-modal-header">
+          <div class="folder-modal-title">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+              <path d="M12 2l3 6 6.5 1-4.7 4.6 1.1 6.4L12 17.5 6.1 20l1.1-6.4L2.5 9 9 8z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+            </svg>
+            <h3>新建业绩</h3>
+          </div>
+          <button class="modal-close" @click="closeAddPerf">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          </button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label class="form-label">项目名称 <span style="color:#e5484d">*</span></label>
+            <input type="text" class="form-input form-input--lg" v-model="newPerf.project_name" placeholder="例：XX市政道路改造工程" />
+          </div>
+          <div class="form-row">
+            <div class="form-group" style="flex:1">
+              <label class="form-label">乙方名称 <span style="color:#e5484d">*</span></label>
+              <input type="text" class="form-input form-input--lg" v-model="newPerf.party_b" placeholder="乙方公司名称" />
+            </div>
+            <div class="form-group" style="flex:1">
+              <label class="form-label">日期</label>
+              <input type="date" class="form-input form-input--lg" v-model="newPerf.date" />
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group" style="flex:1">
+              <label class="form-label">分类</label>
+              <select class="form-input form-input--lg" v-model="newPerf.category">
+                <option value="">请选择分类</option>
+                <option v-for="cat in perfCategories" :key="cat" :value="cat">{{ cat }}</option>
+                <option value="__new__">+ 新建分类</option>
+              </select>
+            </div>
+            <div class="form-group" style="flex:1">
+              <label class="form-label">合同金额</label>
+              <input type="text" class="form-input form-input--lg" v-model="newPerf.amount" placeholder="例：500万" />
+            </div>
+          </div>
+          <div v-if="newPerf.category === '__new__'" class="form-group">
+            <label class="form-label">新分类名称</label>
+            <input type="text" class="form-input form-input--lg" v-model="newPerfNewCat" placeholder="输入新分类名称" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">备注说明</label>
+            <input type="text" class="form-input form-input--lg" v-model="newPerf.description" placeholder="简要描述项目情况（选填）" />
+          </div>
+          <!-- 上传合同扫描件 -->
+          <div class="form-group">
+            <label class="form-label">合同扫描件（PDF）</label>
+            <div class="perf-upload-zone"
+              :class="{ 'perf-upload-zone--done': newPerfUploadedFile }"
+              @click="triggerPerfFileInput"
+              @dragover.prevent="perfUploadDragover = true"
+              @dragleave.prevent="perfUploadDragover = false"
+              @drop.prevent="handlePerfFileDrop">
+              <input type="file" ref="perfFileInput" accept=".pdf" style="display:none" @change="handlePerfFileChange" />
+              <div v-if="!perfUploading && !newPerfUploadedFile" class="upload-prompt">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                  <polyline points="17,8 12,3 7,8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                  <line x1="12" y1="3" x2="12" y2="15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                </svg>
+                <div class="upload-prompt-title">点击或拖拽上传合同 PDF</div>
+                <div class="upload-prompt-desc">仅支持 PDF 格式</div>
+              </div>
+              <div v-if="perfUploading" class="upload-loading">
+                <svg class="spinner" width="20" height="20" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" opacity="0.25"/><path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>
+                <span>上传中...</span>
+              </div>
+              <div v-if="newPerfUploadedFile" class="upload-done">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><polyline points="20,6 9,17 4,12" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                <span>{{ newPerfUploadedFile.name }} 已上传</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn--ghost" @click="closeAddPerf">取消</button>
+          <button class="btn btn--primary" @click="addPerf" :disabled="!newPerf.project_name || !newPerf.party_b">确认添加</button>
+        </div>
+      </div>
+    </div>
+  </Transition>
+
+  <!-- 编辑业绩弹窗 -->
+  <Transition name="fade">
+    <div v-if="showEditPerf" class="modal-overlay">
+      <div class="modal folder-modal" style="width:540px">
+        <div class="modal-header folder-modal-header">
+          <div class="folder-modal-title">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <h3>编辑业绩</h3>
+          </div>
+          <button class="modal-close" @click="showEditPerf = false">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          </button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label class="form-label">项目名称</label>
+            <input type="text" class="form-input form-input--lg" v-model="editPerf.project_name" />
+          </div>
+          <div class="form-row">
+            <div class="form-group" style="flex:1">
+              <label class="form-label">乙方名称</label>
+              <input type="text" class="form-input form-input--lg" v-model="editPerf.party_b" />
+            </div>
+            <div class="form-group" style="flex:1">
+              <label class="form-label">日期</label>
+              <input type="date" class="form-input form-input--lg" v-model="editPerf.date" />
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group" style="flex:1">
+              <label class="form-label">分类</label>
+              <select class="form-input form-input--lg" v-model="editPerf.category">
+                <option value="">请选择分类</option>
+                <option v-for="cat in perfCategories" :key="cat" :value="cat">{{ cat }}</option>
+              </select>
+            </div>
+            <div class="form-group" style="flex:1">
+              <label class="form-label">合同金额</label>
+              <input type="text" class="form-input form-input--lg" v-model="editPerf.amount" />
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">备注说明</label>
+            <input type="text" class="form-input form-input--lg" v-model="editPerf.description" />
+          </div>
+          <div v-if="editPerf.file_name" class="form-group">
+            <label class="form-label">已上传合同</label>
+            <div style="font-size:13px;color:var(--gray-600);display:flex;align-items:center;gap:6px">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><polyline points="14,2 14,8 20,8" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+              {{ editPerf.file_name }}
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn--ghost" @click="showEditPerf = false">取消</button>
+          <button class="btn btn--primary" @click="saveEditPerf" :disabled="!editPerf.project_name">保存修改</button>
+        </div>
+      </div>
+    </div>
+  </Transition>
+
+  <!-- 下载水印弹窗 -->
+  <Transition name="fade">
+    <div v-if="showPerfWatermark" class="modal-overlay">
+      <div class="modal modal--sm">
+        <div class="modal-header">
+          <h3>下载设置</h3>
+          <button class="modal-close" @click="showPerfWatermark = false">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          </button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label class="form-label">水印文字（留空则不添加水印）</label>
+            <input type="text" class="form-input form-input--lg" v-model="perfWatermarkText" placeholder="例：仅供投标使用" />
+          </div>
+          <div style="background:var(--mac-sky-light);border-radius:var(--radius-md);padding:var(--sp-3);margin-top:var(--sp-2)">
+            <p style="font-size:12px;color:var(--mac-purple);margin:0;display:flex;align-items:flex-start;gap:6px">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style="flex-shrink:0;margin-top:2px">
+                <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="1.8"/>
+                <line x1="12" y1="16" x2="12" y2="12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                <circle cx="12" cy="8" r="1" fill="currentColor"/>
+              </svg>
+              水印将以半透明对角线方式添加到 PDF 每一页，适合标注"仅供投标使用"等用途。
+            </p>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn--ghost" @click="showPerfWatermark = false">取消</button>
+          <button class="btn btn--primary" @click="doDownloadPerfWithWatermark">确认下载</button>
         </div>
       </div>
     </div>

@@ -98,6 +98,7 @@ FIELD_DEFINITIONS = {
     "bidding_method": {"label": "招标方式", "group": "基础信息"},
     "procurement_type": {"label": "采购类型", "group": "基础信息"},
     "project_location": {"label": "项目地点", "group": "基础信息"},
+    "announcement_url": {"label": "公告地址", "group": "基础信息"},
     # 机构与联系人
     "purchaser": {"label": "招标人或采购人", "group": "机构与联系人"},
     "agency": {"label": "招标代理机构", "group": "机构与联系人"},
@@ -120,14 +121,8 @@ FIELD_DEFINITIONS = {
     "bond_deadline": {"label": "保证金缴纳截止时间", "group": "时间信息"},
     "bid_deadline": {"label": "投标截止时间", "group": "时间信息"},
     "opening_time": {"label": "开标时间", "group": "时间信息"},
-    # 地点信息
-    "register_location": {"label": "报名地点或平台", "group": "地点信息"},
-    "doc_get_location": {"label": "文件获取地点或平台", "group": "地点信息"},
-    "submit_location": {"label": "投标文件递交地点或平台", "group": "地点信息"},
-    "opening_location": {"label": "开标地点或平台", "group": "地点信息"},
     # 项目建设内容
-    "system_content": {"label": "系统建设内容", "group": "项目建设内容"},
-    "software_modules": {"label": "软件功能模块", "group": "项目建设内容"},
+    "industry": {"label": "所属行业", "group": "项目建设内容"},
 }
 
 # 风险类别
@@ -240,14 +235,19 @@ def get_stats():
     """获取工作台统计数据"""
     projects = load_projects()
     project_files = load_project_files()
+
+    # 递归统计文件管理模块的文件总数（data/files 目录）
+    FILES_DIR = os.path.join(DATA_DIR, "files")
+    total_files = 0
+    if os.path.exists(FILES_DIR):
+        for root, dirs, files in os.walk(FILES_DIR):
+            total_files += len([f for f in files if os.path.isfile(os.path.join(root, f))])
+
+    # 统计已分析项目数（有字段提取记录的项目）
     extracted_fields = load_extracted_fields()
-    risk_items = load_risk_items()
-
-    # 统计项目文件总数
-    total_files = len(project_files)
-
-    # 统计已分析项目数
-    analyzed_projects = len(set(pf.get("project_id") for pf in project_files))
+    analyzed_projects = len(set(
+        f.get("project_id") for f in extracted_fields if f.get("project_id")
+    ))
 
     # 统计资质证书数
     certs_data = _load_json(os.path.join(DATA_DIR, "certs.json"), {"certs": []})
@@ -586,7 +586,8 @@ def get_project(project_id):
 
     # 获取提取字段
     fields = load_extracted_fields()
-    project_fields = [f for f in fields if f.get("project_id") == project_id]
+    valid_keys = set(FIELD_DEFINITIONS.keys())
+    project_fields = [f for f in fields if f.get("project_id") == project_id and f.get("field_key") in valid_keys]
 
     # 兼容处理 1：如果该项目没有任何字段记录（可能是老项目），从 FIELD_DEFINITIONS 动态生成
     if not project_fields:
@@ -607,6 +608,26 @@ def get_project(project_id):
                 "created_at": now,
                 "updated_at": now,
             })
+    else:
+        # 兼容处理 1b：补充新增的字段（如 announcement_url）
+        existing_keys = {f["field_key"] for f in project_fields}
+        for field_key, field_def in FIELD_DEFINITIONS.items():
+            if field_key not in existing_keys:
+                project_fields.append({
+                    "id": str(uuid.uuid4())[:8],
+                    "project_id": project_id,
+                    "field_key": field_key,
+                    "field_label": field_def["label"],
+                    "field_group": field_def["group"],
+                    "machine_value": "",
+                    "confirmed_value": "",
+                    "review_status": "pending",
+                    "confidence": 0.0,
+                    "source_file_id": "",
+                    "source_file_name": "",
+                    "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                })
 
     # 兼容处理 2：如果字段的 machine_value 为空，尝试从 project 对象获取 URL 抓取的值
     project_property_map = {
@@ -618,6 +639,7 @@ def get_project(project_id):
         "max_price": "max_price",
         "bid_deadline": "bid_deadline",
         "opening_time": "opening_time",
+        "announcement_url": "announcement_url",
     }
     for f in project_fields:
         if not f.get("machine_value"):
