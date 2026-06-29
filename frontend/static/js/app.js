@@ -1623,6 +1623,169 @@ createApp({
       saving.value = false;
     };
 
+    // ── 投标比对 - 模拟评分 ──────────────────────────────────
+    const bidScoreProjectId = ref('');
+    const bidScoreFiles = ref([]);
+    const bidScoreDragover = ref(false);
+    const bidScorePrompt = ref('请根据招标文件中的评分标准，对各投标文件逐项打分，并给出详细依据');
+    const bidScoreRunning = ref(false);
+    const bidScoreResult = ref(null);
+    const bidScoreDownloading = ref(false);
+    const bidScoreFileInput = ref(null);
+    const BID_SCORE_MAX_SIZE = 200 * 1024 * 1024;
+    const BID_SCORE_MIN_FILES = 3;
+    const BID_SCORE_MAX_FILES = 10;
+
+    const bidScoreRanking = computed(() => {
+      if (!bidScoreResult.value) return [];
+      return (bidScoreResult.value.ranking || []).map(r => ({
+        ...r,
+        pct: r.total_max ? Math.round(r.total_score / r.total_max * 1000) / 10 : 0,
+      }));
+    });
+
+    const triggerBidScoreFileInput = () => {
+      bidScoreFileInput.value && bidScoreFileInput.value.click();
+    };
+
+    const addBidScoreFiles = (files) => {
+      for (const file of files) {
+        const name = file.name.toLowerCase();
+        if (!name.endsWith('.docx')) {
+          alert(`文件 ${file.name} 格式不符，仅支持 .docx`);
+          continue;
+        }
+        if (file.size > BID_SCORE_MAX_SIZE) {
+          alert(`文件 ${file.name} 超过 200MB 限制`);
+          continue;
+        }
+        if (bidScoreFiles.value.length >= BID_SCORE_MAX_FILES) {
+          alert(`最多支持 ${BID_SCORE_MAX_FILES} 份投标文件`);
+          break;
+        }
+        // 避免重复
+        if (!bidScoreFiles.value.some(f => f.name === file.name && f.size === file.size)) {
+          bidScoreFiles.value.push(file);
+        }
+      }
+    };
+
+    const handleBidScoreFileChange = (e) => {
+      const files = Array.from(e.target.files);
+      if (files.length) addBidScoreFiles(files);
+      e.target.value = '';
+    };
+
+    const handleBidScoreFileDrop = (e) => {
+      bidScoreDragover.value = false;
+      const files = Array.from(e.dataTransfer.files);
+      if (files.length) addBidScoreFiles(files);
+    };
+
+    const removeBidScoreFile = (idx) => {
+      bidScoreFiles.value.splice(idx, 1);
+    };
+
+    const onBidScoreProjectChange = () => {
+      bidScoreResult.value = null;
+    };
+
+    const resetBidScoreForm = () => {
+      bidScoreProjectId.value = '';
+      bidScoreFiles.value = [];
+      bidScorePrompt.value = '请根据招标文件中的评分标准，对各投标文件逐项打分，并给出详细依据';
+      bidScoreResult.value = null;
+    };
+
+    const resetBidScoreResult = () => {
+      bidScoreResult.value = null;
+    };
+
+    const runBidScore = async () => {
+      if (!bidScoreProjectId.value) {
+        alert('请选择招标项目');
+        return;
+      }
+      if (bidScoreFiles.value.length < BID_SCORE_MIN_FILES) {
+        alert(`至少需要上传 ${BID_SCORE_MIN_FILES} 份投标文件`);
+        return;
+      }
+      if (!bidScorePrompt.value.trim()) {
+        alert('评分要求不能为空');
+        return;
+      }
+      bidScoreRunning.value = true;
+      bidScoreResult.value = null;
+      try {
+        const form = new FormData();
+        form.append('project_id', bidScoreProjectId.value);
+        form.append('prompt', bidScorePrompt.value);
+        for (const f of bidScoreFiles.value) {
+          form.append('files', f);
+        }
+        const res = await fetch('/api/bid-score/run', { method: 'POST', body: form });
+        const text = await res.text();
+        let data;
+        try { data = JSON.parse(text); }
+        catch { alert('服务器返回异常，请刷新页面后重试'); return; }
+        if (!data.success) {
+          alert(data.message || '评分失败');
+          return;
+        }
+        bidScoreResult.value = data;
+      } catch (e) {
+        console.error('模拟评分失败:', e);
+        alert('评分失败：' + (e.message || e));
+      } finally {
+        bidScoreRunning.value = false;
+      }
+    };
+
+    const downloadBidScoreReport = async () => {
+      if (!bidScoreResult.value) return;
+      bidScoreDownloading.value = true;
+      try {
+        const r = bidScoreResult.value;
+        const res = await fetch('/api/bid-score/download', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            project_name: r.project_name,
+            checked_at: r.checked_at,
+            bid_count: r.bid_count,
+            criteria_info: r.criteria_info,
+            bidders: r.bidders,
+            scoring_results: r.scoring_results,
+            plagiarism: r.plagiarism,
+            ranking: r.ranking,
+            truncated: r.truncated,
+          }),
+        });
+        if (!res.ok) {
+          let msg = '下载失败';
+          try { const j = await res.json(); msg = j.message || msg; } catch {}
+          alert(msg);
+          return;
+        }
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        const cd = res.headers.get('Content-Disposition') || '';
+        const m = cd.match(/filename\*?=(?:UTF-8'')?["']?([^"';]+)/i);
+        a.download = m ? decodeURIComponent(m[1]) : '投标评分对比报告.docx';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      } catch (e) {
+        console.error('下载报告失败:', e);
+        alert('下载报告失败：' + (e.message || e));
+      } finally {
+        bidScoreDownloading.value = false;
+      }
+    };
+
     // ── 投标比对 - 文件检查 ─────────────────────────────────
     const BID_CHECK_DEFAULT_PROMPT = `以资深的信息化类项目评审专家，请对照采购或招标文件文件，检查投标文件如下事项：
 
@@ -1907,6 +2070,12 @@ createApp({
       handlePerfFileChange, handlePerfFileDrop, addPerf, deletePerf,
       openEditPerf, saveEditPerf, downloadPerfFile, batchDownloadPerf,
       doDownloadPerfWithWatermark, toggleAllPerfSelect,
+      // 投标比对 - 模拟评分
+      bidScoreProjectId, bidScoreFiles, bidScoreDragover, bidScorePrompt,
+      bidScoreRunning, bidScoreResult, bidScoreDownloading, bidScoreFileInput, bidScoreRanking,
+      triggerBidScoreFileInput, addBidScoreFiles, handleBidScoreFileChange, handleBidScoreFileDrop,
+      removeBidScoreFile, onBidScoreProjectChange,
+      resetBidScoreForm, resetBidScoreResult, runBidScore, downloadBidScoreReport,
       // 投标比对 - 文件检查
       bidCompareTab, bidCheckProjectId, bidCheckFile, bidCheckDragover, bidCheckPrompt,
       bidCheckRunning, bidCheckResult, bidCheckDownloading, bidCheckFileInput,

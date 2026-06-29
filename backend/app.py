@@ -19,6 +19,7 @@ from backend.routes.pricing import pricing_bp
 from backend.routes.projects import projects_bp
 from backend.routes.performance import performance_bp
 from backend.routes.bid_check import bid_check_bp
+from backend.routes.bid_score import bid_score_bp
 
 # ── 路径配置 ────────────────────────────────────────────────
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -46,6 +47,7 @@ app.register_blueprint(pricing_bp)
 app.register_blueprint(projects_bp)
 app.register_blueprint(performance_bp)
 app.register_blueprint(bid_check_bp)
+app.register_blueprint(bid_score_bp)
 
 
 # ── 静态页面入口 ────────────────────────────────────────────

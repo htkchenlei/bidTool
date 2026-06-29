@@ -4167,3 +4167,440 @@ html, body {
   font-style: italic;
   margin: var(--sp-2) 0 0 0;
 }
+
+/* ── 模拟评分 ──────────────────────────────────────── */
+.bid-score {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.bid-score .bid-check-card-desc {
+  color: var(--gray-500);
+  font-size: 13px;
+  margin-top: 4px;
+}
+
+/* 多文件上传区 */
+.bid-score-file-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px;
+  min-height: 80px;
+}
+
+.bid-score-file-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+}
+
+.bid-score-file-icon {
+  font-size: 16px;
+}
+
+.bid-score-file-info {
+  flex: 1;
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  overflow: hidden;
+}
+
+.bid-score-file-name {
+  font-size: 13px;
+  color: #111827;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bid-score-file-size {
+  font-size: 11px;
+  color: var(--gray-500);
+}
+
+.bid-score-file-remove {
+  background: none;
+  border: none;
+  color: var(--gray-400);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: all 0.15s;
+}
+
+.bid-score-file-remove:hover {
+  background: #fee2e2;
+  color: var(--color-danger);
+}
+
+.bid-score-file-slot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+  border: 1px dashed #d1d5db;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s;
+  margin-top: 4px;
+}
+
+.bid-score-file-slot:hover {
+  border-color: var(--color-primary);
+  background: #eff6ff;
+}
+
+.bid-score-file-add {
+  font-size: 13px;
+  color: var(--color-primary);
+  font-weight: 500;
+}
+
+/* 结果头部 */
+.bid-score-result {
+  margin-top: 24px;
+}
+
+.bid-score-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 16px 20px;
+  background: white;
+  border-radius: 10px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+}
+
+.bid-score-header-info h3 {
+  font-size: 17px;
+  font-weight: 600;
+  margin: 0 0 8px;
+}
+
+.bid-score-header-info span {
+  display: inline-block;
+  font-size: 13px;
+  color: var(--gray-500);
+  margin-right: 16px;
+}
+
+.bid-score-header-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* 评分区块 */
+.bid-score-section {
+  margin-top: 20px;
+  padding: 16px 20px;
+  background: white;
+  border-radius: 10px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+}
+
+.bid-score-section-title {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 0 0 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 标签 */
+.bid-score-tag {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.bid-score-tag--ok {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.bid-score-tag--warn {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.bid-score-tag--fail {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+/* 评分标准 */
+.bid-score-criteria-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.bid-score-criteria-item {
+  padding: 4px 10px;
+  background: #eff6ff;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #1e40af;
+}
+
+.bid-score-criteria-total {
+  padding: 4px 10px;
+  background: #f3f4f6;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #374151;
+  font-weight: 500;
+}
+
+/* 排名 */
+.bid-score-ranking {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.bid-score-rank-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  background: #f9fafb;
+  border-radius: 8px;
+  border-left: 4px solid #d1d5db;
+}
+
+.bid-score-rank-item.bid-score-rank--1 {
+  background: linear-gradient(135deg, #fef3c7, #fde68a);
+  border-left-color: #f59e0b;
+}
+
+.bid-score-rank-item.bid-score-rank--2 {
+  background: linear-gradient(135deg, #f3f4f6, #e5e7eb);
+  border-left-color: #9ca3af;
+}
+
+.bid-score-rank-item.bid-score-rank--3 {
+  background: linear-gradient(135deg, #fed7aa, #fdba74);
+  border-left-color: #ea580c;
+}
+
+.bid-score-rank-num {
+  font-size: 18px;
+  font-weight: 700;
+  min-width: 28px;
+}
+
+.bid-score-rank-name {
+  flex: 1;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.bid-score-rank-score {
+  font-size: 14px;
+  font-weight: 600;
+  color: #111827;
+}
+
+.bid-score-rank-pct {
+  font-size: 12px;
+  color: var(--gray-500);
+  min-width: 40px;
+  text-align: right;
+}
+
+/* 对比表格 */
+.bid-score-table-wrap {
+  overflow-x: auto;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+}
+
+.bid-score-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.bid-score-table th,
+.bid-score-table td {
+  padding: 10px 14px;
+  text-align: center;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.bid-score-table th {
+  background: #f9fafb;
+  font-weight: 600;
+  color: #374151;
+  white-space: nowrap;
+}
+
+.bid-score-table td {
+  color: #111827;
+}
+
+.bid-score-td-name {
+  text-align: left !important;
+  font-weight: 500;
+  color: #374151 !important;
+  white-space: nowrap;
+}
+
+.bid-score-total-row td {
+  background: #fffbeb;
+  font-weight: 700;
+  color: #92400e;
+  font-size: 14px;
+}
+
+.bid-score-total-row .bid-score-td-name {
+  color: #92400e !important;
+}
+
+/* 各家详情 */
+.bid-score-detail-card {
+  margin-top: 12px;
+  padding: 12px 16px;
+  background: #f9fafb;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+}
+
+.bid-score-detail-header {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.bid-score-detail-header h5 {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.bid-score-detail-summary {
+  font-size: 13px;
+  color: var(--gray-600);
+  flex: 1;
+  min-width: 200px;
+}
+
+.bid-score-detail-row {
+  padding: 6px 0;
+  border-bottom: 1px dashed #e5e7eb;
+}
+
+.bid-score-detail-row:last-child {
+  border-bottom: none;
+}
+
+.bid-score-detail-row-head {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+}
+
+.bid-score-detail-row-score {
+  font-weight: 600;
+  color: #111827;
+}
+
+.bid-score-detail-row-reason {
+  font-size: 12px;
+  color: var(--gray-500);
+  margin-top: 4px;
+  line-height: 1.5;
+}
+
+.bid-score-detail-tag-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  margin-top: 8px;
+}
+
+.bid-score-detail-label {
+  font-size: 12px;
+  color: var(--gray-500);
+  font-weight: 500;
+}
+
+/* 查重 */
+.bid-score-plagiarism-empty {
+  padding: 12px;
+  background: #d1fae5;
+  color: #065f46;
+  border-radius: 8px;
+  font-size: 13px;
+  text-align: center;
+}
+
+.bid-score-plagiarism-item {
+  margin-top: 10px;
+  padding: 12px 16px;
+  border-radius: 8px;
+  border-left: 4px solid;
+}
+
+.bid-score-plagiarism--high {
+  background: #fee2e2;
+  border-left-color: #dc2626;
+}
+
+.bid-score-plagiarism--medium {
+  background: #fef3c7;
+  border-left-color: #d97706;
+}
+
+.bid-score-plagiarism--low {
+  background: #fef9c3;
+  border-left-color: #ca8a04;
+}
+
+.bid-score-plagiarism-head {
+  font-size: 13px;
+  font-weight: 600;
+  color: #111827;
+}
+
+.bid-score-plagiarism-level {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  background: rgba(0,0,0,0.08);
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.bid-score-plagiarism-block {
+  margin-top: 8px;
+  padding: 8px 12px;
+  background: rgba(255,255,255,0.5);
+  border-radius: 6px;
+  font-size: 12px;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  line-height: 1.5;
+}
+
+.bid-score-plagiarism-line {
+  color: #374151;
+}
