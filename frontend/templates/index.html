@@ -883,135 +883,133 @@
         </div>
 
         <!-- 模拟评分 -->
-        <div v-else-if="bidCompareTab === 'score'" class="bid-score">
-          <!-- 表单卡片 -->
-          <div v-if="!bidScoreResult" class="bid-check-card">
-            <div class="bid-check-card-header">
-              <h3>模拟评分</h3>
-              <span class="bid-check-card-desc">上传至少 3 份投标文件，AI 对照招标文件评分标准逐项打分，检测技术内容重复</span>
-            </div>
-
-            <!-- 项目选择 -->
-            <div class="bid-check-form-row">
-              <label class="bid-check-label">招标项目</label>
-              <select class="bid-check-select" v-model="bidScoreProjectId" @change="onBidScoreProjectChange">
+        <div v-else-if="bidCompareTab === 'score'" class="bid-check-content">
+          <!-- 配置 / 上传区 -->
+          <div v-if="!bidScoreResult && !bidScoreRunning" class="bid-check-form-card">
+            <div class="form-group">
+              <label class="form-label">招标项目 <span style="color:#e5484d">*</span></label>
+              <select class="form-input form-input--lg" v-model="bidScoreProjectId" @change="onBidScoreProjectChange">
                 <option value="">请选择已分析的招标项目</option>
-                <option v-for="p in projects" :key="p.id" :value="p.id">{{ p.name }}</option>
+                <option v-for="proj in projects" :key="proj.id" :value="proj.id">
+                  {{ proj.name }}（{{ getProjectStatusLabel(proj.status) }}）
+                </option>
               </select>
+              <p class="form-hint">仅可选择已存在项目；若项目尚未分析，请先到「招标分析」完成分析。</p>
             </div>
 
-            <!-- 文件上传区 -->
-            <div class="bid-check-form-row">
-              <label class="bid-check-label">投标文件（至少3份，.docx格式）</label>
-              <div
-                class="bid-check-upload-zone"
-                :class="{ 'bid-check-upload-zone--active': bidScoreDragover, 'bid-check-upload-zone--has': bidScoreFiles.length > 0 }"
-                @dragenter.prevent="bidScoreDragover = true"
+            <div class="form-group">
+              <label class="form-label">投标文件 <span style="color:#e5484d">*</span><span class="form-label-sublabel">（至少 3 份，.docx 格式）</span></label>
+              <div class="bid-check-upload-zone"
+                :class="{ 'bid-check-upload-zone--active': bidScoreDragover }"
+                @click="triggerBidScoreFileInput"
                 @dragover.prevent="bidScoreDragover = true"
-                @dragleave="bidScoreDragover = false"
-                @drop.prevent="handleBidScoreFileDrop"
-              >
-                <svg v-if="bidScoreFiles.length === 0" width="40" height="40" viewBox="0 0 24 24" fill="none">
-                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="#6b7280" stroke-width="1.8" stroke-linecap="round"/>
-                  <polyline points="17 8 12 3 7 8" stroke="#6b7280" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-                  <line x1="12" y1="3" x2="12" y2="15" stroke="#6b7280" stroke-width="1.8" stroke-linecap="round"/>
-                </svg>
-                <p class="bid-check-upload-text" v-if="bidScoreFiles.length === 0">拖拽文件到此区域，或 <span class="bid-check-upload-link" @click="triggerBidScoreFileInput">点击选择文件</span></p>
-                <p class="bid-check-upload-text bid-check-upload-text--hint" v-if="bidScoreFiles.length === 0">支持 .docx 格式，单文件最大 200MB，最多 10 份</p>
-                <div v-if="bidScoreFiles.length > 0" class="bid-score-file-list">
-                  <div v-for="(f, idx) in bidScoreFiles" :key="idx" class="bid-score-file-item">
-                    <div class="bid-score-file-icon">📝</div>
-                    <div class="bid-score-file-info">
-                      <span class="bid-score-file-name">{{ f.name }}</span>
-                      <span class="bid-score-file-size">{{ (f.size / 1024 / 1024).toFixed(2) }} MB</span>
-                    </div>
-                    <button class="bid-score-file-remove" @click="removeBidScoreFile(idx)">✕</button>
+                @dragleave.prevent="bidScoreDragover = false"
+                @drop.prevent="handleBidScoreFileDrop">
+                <div v-if="bidScoreFiles.length === 0" class="upload-prompt">
+                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                    <polyline points="17,8 12,3 7,8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                    <line x1="12" y1="3" x2="12" y2="15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                  </svg>
+                  <div class="upload-prompt-title">点击或拖拽上传投标文件</div>
+                  <div class="upload-prompt-desc">支持 .docx 格式，单文件最大 200MB，最多 10 份</div>
+                </div>
+                <div v-else class="bid-score-upload-list">
+                  <div v-for="(f, idx) in bidScoreFiles" :key="idx" class="bid-score-upload-item">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><polyline points="14,2 14,8 20,8" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><line x1="16" y1="13" x2="8" y2="13" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><line x1="16" y1="17" x2="8" y2="17" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><polyline points="10,9 9,9 8,9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+                    <span class="bid-score-upload-name">{{ f.name }}</span>
+                    <span class="bid-check-file-size">{{ formatFileSize(f.size) }}</span>
+                    <button class="icon-btn icon-btn--danger icon-btn--sm" @click.stop="removeBidScoreFile(idx)" title="移除">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                    </button>
                   </div>
-                  <div class="bid-score-file-slot" @click="triggerBidScoreFileInput">
-                    <span class="bid-score-file-add">+ 添加文件</span>
+                  <div class="bid-score-upload-add" @click.stop="triggerBidScoreFileInput">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><line x1="12" y1="5" x2="12" y2="19" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="5" y1="12" x2="19" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                    添加文件
                   </div>
                 </div>
               </div>
-              <input ref="bidScoreFileInput" type="file" multiple accept=".docx" style="display:none" @change="handleBidScoreFileChange"/>
-              <div class="bid-check-file-count">已选 {{ bidScoreFiles.length }} / {{ BID_SCORE_MAX_FILES }} 份（至少需要 3 份）</div>
+              <input type="file" ref="bidScoreFileInput" multiple accept=".docx" style="display:none" @change="handleBidScoreFileChange"/>
+              <p class="form-hint" :class="{'form-hint--warn': bidScoreFiles.length < 3}">
+                已选 {{ bidScoreFiles.length }} / {{ 10 }} 份（至少需要 3 份）
+              </p>
             </div>
 
-            <!-- 提示词 -->
-            <div class="bid-check-form-row">
-              <label class="bid-check-label">评分要求</label>
-              <textarea class="bid-check-textarea" v-model="bidScorePrompt" rows="3" placeholder="请输入评分要求..."></textarea>
+            <div class="form-group">
+              <label class="form-label">评分要求 <span style="color:#e5484d">*</span></label>
+              <textarea class="form-input bid-check-prompt-area" v-model="bidScorePrompt" rows="6" placeholder="请输入评分要求..."></textarea>
+              <p class="form-hint">评分要求可自行修改，将作为 AI 评分的依据。</p>
             </div>
 
-            <!-- 操作按钮 -->
             <div class="bid-check-form-actions">
-              <button class="bid-btn bid-btn--primary" @click="runBidScore" :disabled="bidScoreRunning">
-                <span v-if="bidScoreRunning">评分中...</span>
-                <span v-else>开始评分</span>
+              <button class="btn btn--primary btn--lg" @click="runBidScore"
+                :disabled="!bidScoreProjectId || bidScoreFiles.length < 3 || !bidScorePrompt.trim()">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><polyline points="22,12 18,12 15,21 9,3 6,12 2,12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                开始评分
               </button>
-              <button class="bid-btn bid-btn--ghost" @click="resetBidScoreForm" :disabled="bidScoreRunning">清空</button>
+              <button class="btn btn--ghost" @click="resetBidScoreForm">清空</button>
             </div>
           </div>
 
-          <!-- 加载中 -->
-          <div v-if="bidScoreRunning" class="bid-check-loading">
-            <div class="bid-check-spinner"></div>
-            <p>正在对 {{ bidScoreFiles.length }} 份投标文件进行评分，请耐心等待...</p>
+          <!-- 运行中 -->
+          <div v-else-if="bidScoreRunning" class="bid-check-loading">
+            <svg class="spinner" width="40" height="40" viewBox="0 0 24 24" fill="none">
+              <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" opacity="0.25"/>
+              <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+            </svg>
+            <div class="bid-check-loading-title">正在对 {{ bidScoreFiles.length }} 份投标文件进行评分…</div>
+            <div class="bid-check-loading-desc">AI 正在对照招标文件评分标准逐项打分，文件较大时可能需要几分钟，请勿离开页面</div>
           </div>
 
-          <!-- 结果展示 -->
-          <div v-if="bidScoreResult && !bidScoreRunning" class="bid-score-result">
-            <!-- 头部信息 -->
-            <div class="bid-score-header">
-              <div class="bid-score-header-info">
-                <h3>评分结果</h3>
-                <span>项目：{{ bidScoreResult.project_name }}</span>
-                <span>时间：{{ bidScoreResult.checked_at }}</span>
-                <span>投标文件数：{{ bidScoreResult.bid_count }}</span>
+          <!-- 结果区 -->
+          <div v-else class="bid-check-result">
+            <div class="bid-check-result-header">
+              <div>
+                <h3 class="bid-check-result-title">模拟评分结果</h3>
+                <div class="bid-check-result-meta">
+                  <span><strong>招标项目：</strong>{{ bidScoreResult.project_name }}</span>
+                  <span><strong>投标文件数：</strong>{{ bidScoreResult.bid_count }}</span>
+                  <span><strong>评分时间：</strong>{{ bidScoreResult.checked_at }}</span>
+                </div>
               </div>
-              <div class="bid-score-header-actions">
-                <button class="bid-btn bid-btn--primary" @click="downloadBidScoreReport" :disabled="bidScoreDownloading">
-                  {{ bidScoreDownloading ? '下载中...' : '下载报告' }}
+              <div class="bid-check-result-actions">
+                <button class="btn btn--primary" @click="downloadBidScoreReport" :disabled="bidScoreDownloading">
+                  <svg v-if="!bidScoreDownloading" width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><polyline points="7,10 12,15 17,10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><line x1="12" y1="15" x2="12" y2="3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                  {{ bidScoreDownloading ? '生成中...' : '下载报告 (DOCX)' }}
                 </button>
-                <button class="bid-btn bid-btn--ghost" @click="resetBidScoreForm">重新评分</button>
-              </div>
-            </div>
-
-            <!-- 截断提示 -->
-            <div v-if="bidScoreResult.truncated" class="bid-check-truncated-note">
-              ⚠ 因文件篇幅较大，部分内容已被截取，AI 评分可能不完整
-            </div>
-
-            <!-- 评分标准 -->
-            <div v-if="bidScoreResult.criteria_info" class="bid-score-section">
-              <h4 class="bid-score-section-title">
-                评分标准
-                <span v-if="bidScoreResult.criteria_info.source === 'default'" class="bid-score-tag bid-score-tag--warn">默认（未能提取）</span>
-                <span v-else class="bid-score-tag bid-score-tag--ok">已提取</span>
-              </h4>
-              <div class="bid-score-criteria-list">
-                <span v-for="c in bidScoreResult.criteria_info.criteria" :key="c.name" class="bid-score-criteria-item">
-                  {{ c.name }}（{{ c.max_score }}分）
-                </span>
-                <span class="bid-score-criteria-total">满分：{{ bidScoreResult.criteria_info.total_max }}</span>
+                <button class="btn btn--outline" @click="resetBidScoreForm">重新评分</button>
               </div>
             </div>
 
             <!-- 排名 -->
-            <div class="bid-score-section">
-              <h4 class="bid-score-section-title">排名</h4>
-              <div class="bid-score-ranking">
-                <div v-for="r in bidScoreRanking" :key="r.rank" class="bid-score-rank-item" :class="'bid-score-rank--' + r.rank">
-                  <span class="bid-score-rank-num">{{ r.rank }}</span>
-                  <span class="bid-score-rank-name">{{ r.bidder_name }}</span>
-                  <span class="bid-score-rank-score">{{ r.total_score }} / {{ r.total_max }}</span>
-                  <span class="bid-score-rank-pct">{{ r.pct }}%</span>
-                </div>
+            <div class="bid-check-stats bid-score-stats">
+              <div v-for="(r, i) in bidScoreRanking" :key="r.rank" class="bid-check-stat" :class="'bid-check-stat--rank' + r.rank">
+                <div class="bid-check-stat-num">{{ r.total_score }}</div>
+                <div class="bid-check-stat-label">{{ r.bidder_name }}</div>
+                <div class="bid-check-stat-sub">第 {{ r.rank }} 名 · {{ r.pct }}%</div>
+              </div>
+            </div>
+
+            <div v-if="bidScoreResult.truncated" class="bid-check-truncate-note">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="1.8"/><line x1="12" y1="16" x2="12" y2="12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="12" cy="8" r="1" fill="currentColor"/></svg>
+              因文件篇幅较大，已对招标/投标文件内容做截取处理，部分内容未被纳入 AI 评分。
+            </div>
+
+            <!-- 评分标准 -->
+            <div class="bid-check-summary">
+              <h4>评分标准
+                <span v-if="bidScoreResult.criteria_info.source === 'default'" class="bid-check-conc bid-check-conc--低">默认（未能提取）</span>
+                <span v-else class="bid-check-conc bid-check-conc--符合">已提取</span>
+              </h4>
+              <div class="bid-score-criteria-list">
+                <span v-for="c in bidScoreResult.criteria_info.criteria" :key="c.name" class="bid-score-criteria-tag">{{ c.name }}（{{ c.max_score }}分）</span>
+                <span class="bid-score-criteria-total">满分：{{ bidScoreResult.criteria_info.total_max }}</span>
               </div>
             </div>
 
             <!-- 得分对比表 -->
-            <div class="bid-score-section">
-              <h4 class="bid-score-section-title">得分对比</h4>
+            <div class="bid-score-table-section">
+              <h4>得分对比</h4>
               <div class="bid-score-table-wrap">
                 <table class="bid-score-table">
                   <thead>
@@ -1021,7 +1019,7 @@
                     </tr>
                   </thead>
                   <tbody>
-                    <tr v-for="crit in (bidScoreResult.criteria_info ? bidScoreResult.criteria_info.criteria : [])" :key="crit.name">
+                    <tr v-for="crit in bidScoreResult.criteria_info.criteria" :key="crit.name">
                       <td class="bid-score-td-name">{{ crit.name }}</td>
                       <td v-for="r in bidScoreResult.scoring_results" :key="r.bidder_index">
                         {{ ((r.scores || []).find(s => s.name === crit.name) || {}).score || 0 }} / {{ ((r.scores || []).find(s => s.name === crit.name) || {}).max_score || 0 }}
@@ -1029,9 +1027,7 @@
                     </tr>
                     <tr class="bid-score-total-row">
                       <td class="bid-score-td-name">总分</td>
-                      <td v-for="r in bidScoreResult.scoring_results" :key="r.bidder_index">
-                        {{ r.total_score }} / {{ r.total_max }}
-                      </td>
+                      <td v-for="r in bidScoreResult.scoring_results" :key="r.bidder_index">{{ r.total_score }} / {{ r.total_max }}</td>
                     </tr>
                   </tbody>
                 </table>
@@ -1039,47 +1035,55 @@
             </div>
 
             <!-- 各家评分详情 -->
-            <div class="bid-score-section">
-              <h4 class="bid-score-section-title">各家评分详情</h4>
-              <div v-for="r in bidScoreResult.scoring_results" :key="r.bidder_index" class="bid-score-detail-card">
-                <div class="bid-score-detail-header">
-                  <h5>{{ r.bidder_name }} — {{ r.total_score }} / {{ r.total_max }} 分</h5>
-                  <span v-if="r.summary" class="bid-score-detail-summary">{{ r.summary }}</span>
+            <div class="bid-check-items">
+              <h4>各家评分详情</h4>
+              <div v-for="r in bidScoreResult.scoring_results" :key="r.bidder_index" class="bid-check-item">
+                <div class="bid-check-item-header">
+                  <span class="bid-check-conc bid-check-conc--score">{{ r.total_score }} / {{ r.total_max }}</span>
+                  <span class="risk-category">{{ r.bidder_name }}</span>
+                  <span class="bid-check-item-title">{{ r.summary }}</span>
                 </div>
-                <div v-for="s in (r.scores || [])" :key="s.name" class="bid-score-detail-row">
-                  <div class="bid-score-detail-row-head">
-                    <strong>{{ s.name }}</strong>
-                    <span class="bid-score-detail-row-score">{{ s.score }} / {{ s.max_score }}</span>
+                <div class="bid-score-detail-grid">
+                  <div v-for="s in (r.scores || [])" :key="s.name" class="bid-score-detail-cell">
+                    <div class="bid-score-detail-cell-head">
+                      <strong>{{ s.name }}</strong>
+                      <span class="bid-score-detail-cell-score">{{ s.score }} / {{ s.max_score }}</span>
+                    </div>
+                    <div v-if="s.reason" class="bid-score-detail-cell-reason">{{ s.reason }}</div>
                   </div>
-                  <div v-if="s.reason" class="bid-score-detail-row-reason">{{ s.reason }}</div>
                 </div>
-                <div v-if="r.strengths && r.strengths.length" class="bid-score-detail-tag-row">
-                  <span class="bid-score-detail-label">优势：</span>
-                  <span v-for="(st, i) in r.strengths" :key="i" class="bid-score-tag bid-score-tag--ok">{{ st }}</span>
-                </div>
-                <div v-if="r.weaknesses && r.weaknesses.length" class="bid-score-detail-tag-row">
-                  <span class="bid-score-detail-label">不足：</span>
-                  <span v-for="(wk, i) in r.weaknesses" :key="i" class="bid-score-tag bid-score-tag--fail">{{ wk }}</span>
+                <div class="bid-score-detail-tags">
+                  <div v-if="r.strengths && r.strengths.length" class="bid-score-detail-tag-group">
+                    <span class="bid-score-detail-tag-label">优势：</span>
+                    <span v-for="(st, i) in r.strengths" :key="'s'+i" class="bid-check-conc bid-check-conc--符合">{{ st }}</span>
+                  </div>
+                  <div v-if="r.weaknesses && r.weaknesses.length" class="bid-score-detail-tag-group">
+                    <span class="bid-score-detail-tag-label">不足：</span>
+                    <span v-for="(wk, i) in r.weaknesses" :key="'w'+i" class="bid-check-conc bid-check-conc--高">{{ wk }}</span>
+                  </div>
                 </div>
               </div>
             </div>
 
-            <!-- 技术查重警示 -->
-            <div class="bid-score-section">
-              <h4 class="bid-score-section-title">
-                技术内容查重检测
-                <span v-if="bidScoreResult.plagiarism && bidScoreResult.plagiarism.length" class="bid-score-tag bid-score-tag--fail">发现 {{ bidScoreResult.plagiarism.length }} 组疑似重复</span>
-                <span v-else-if="bidScoreResult.plagiarism && bidScoreResult.plagiarism.length === 0" class="bid-score-tag bid-score-tag--ok">未检测到重复</span>
+            <!-- 技术查重检测 -->
+            <div class="bid-check-items">
+              <h4>技术内容查重检测
+                <span v-if="bidScoreResult.plagiarism && bidScoreResult.plagiarism.length" class="bid-check-conc bid-check-conc--高">发现 {{ bidScoreResult.plagiarism.length }} 组疑似重复</span>
+                <span v-else class="bid-check-conc bid-check-conc--符合">未检测到重复</span>
               </h4>
               <div v-if="!bidScoreResult.plagiarism || bidScoreResult.plagiarism.length === 0" class="bid-score-plagiarism-empty">
-                ✓ 未检测到明显的技术内容重复
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><polyline points="20,6 9,17 4,12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                未检测到明显的技术内容重复
               </div>
-              <div v-for="(pl, idx) in bidScoreResult.plagiarism" :key="idx" class="bid-score-plagiarism-item" :class="'bid-score-plagiarism--' + pl.level">
-                <div class="bid-score-plagiarism-head">
-                  ⚠ {{ pl.bidder_a }} 与 {{ pl.bidder_b }}：相似度 {{ (pl.similarity * 100).toFixed(1) }}%
-                  <span class="bid-score-plagiarism-level">{{ pl.level === 'high' ? '高度相似' : pl.level === 'medium' ? '中度相似' : '轻度相似' }}</span>
+              <div v-for="(pl, idx) in bidScoreResult.plagiarism" :key="idx" class="bid-check-item bid-score-plagiarism-item" :class="'bid-score-plagiarism--' + pl.level">
+                <div class="bid-check-item-header">
+                  <span class="bid-check-conc" :class="'bid-check-conc--' + (pl.level === 'high' ? '高' : pl.level === 'medium' ? '中' : '低')">
+                    {{ pl.level === 'high' ? '高度相似' : pl.level === 'medium' ? '中度相似' : '轻度相似' }}
+                  </span>
+                  <span class="risk-category">{{ pl.bidder_a }} vs {{ pl.bidder_b }}</span>
+                  <span class="bid-check-item-title">相似度 {{ (pl.similarity * 100).toFixed(1) }}%</span>
                 </div>
-                <div v-for="(blk, bidx) in (pl.matching_blocks || [])" :key="bidx" class="bid-score-plagiarism-block">
+                <div v-for="(blk, bidx) in (pl.matching_blocks || []).slice(0, 2)" :key="bidx" class="bid-score-plagiarism-block">
                   <div v-for="(line, li) in (blk.lines_from_1 || []).slice(0, 3)" :key="li" class="bid-score-plagiarism-line">{{ line }}</div>
                 </div>
               </div>
