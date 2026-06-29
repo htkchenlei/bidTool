@@ -1623,6 +1623,209 @@ createApp({
       saving.value = false;
     };
 
+    // ── 投标比对 - 文件检查 ─────────────────────────────────
+    const BID_CHECK_DEFAULT_PROMPT = `以资深的信息化类项目评审专家，请对照采购或招标文件文件，检查投标文件如下事项：
+
+一、基本信息
+1.投标文件或响应文件的项目名称、项目编号、包号、采购人名称、招标代理机构名称是否与招标公告或招标文件中写明的一致
+2.投标文件落款处的字段是否一致（比如招标文件写的是投标人，投标文件却写的是供应商、公司名称、响应人等字样）
+3.投标文件中日期落款是否符合要求，是否晚于招标文件发布日期，并且不晚于开标日期
+4.招标文件给出的固定格式，投标文件是否都有遵守，并且格式内容没有遗漏
+5.报价金额前后是否一致，分项报价表每个分项的单价和总价是否正确，分项报价表的总价是否一致
+6.报价大写和小写是否一致，报价单位（元或者万元）是否标注正确
+
+二、资格项检查
+1.是否提供营业执照
+2.是否提供招标文件要求的时限内的经审计的财务报告或银行出具的资信证明
+3.是否提供招标文件要求的时限内的税收或社保凭证
+4.是否提供具有履行合同所必需的设备和专业技术能力（承诺函/证明材料）
+5.是否提供参加政府采购活动前三年内无重大违法记录声明或承诺函
+6.是否提供信用记录查询（失信被执行人、重大税收违法、政府采购严重违法失信）
+7.其他招标文件要求的资格项
+
+三、完整性检查
+1.是否提供中小企业声明函
+2.商务偏离表
+3.（招标文件中如有要求）残疾人福利性单位声明函、监狱企业声明函是否提供
+4.招标文件中给出的响应文件格式或投标文件格式，投标文件中是否都按照招标文件中的格式列出，并编写相应的内容
+
+四、废标项检查
+1.招标文件中要求提供承诺或者声明的事项，投标文件中是否提供承诺函或者声明函
+2.招标文件中标注五角星的条款，投标文件中是否响应
+3.投标报价金额是否超过最高限价、预算价或者招标控制价
+4.响应文件中是否出现其他与本项目无关的地域、项目名称
+5.响应文件中是否出现其他与本项目无关的公司名称
+
+五、商务和技术文件检查
+1.招标文件中商务偏离表是否允许为空，如不允许，投标文件中商务偏离表是否有填写相应内容，内容是否有缺失
+2.技术偏离表的内容是否涵盖了全部项目需求部分的内容，并逐条响应（不许简单复制粘贴），并全部达到响应或无偏离
+3.检查技术指标（例如响应时间、并发数、可用性等）是否与采购文件要求一致
+4.检查投标文件是否超出采购文件要求范围自行增加功能（避免交付风险）
+5.项目团队人员数量是否符合招标文件要求
+6.招标文件是否要求提供团队人员社保缴纳证明，如有要求，投标文件是否提供了团队人员的社保缴纳证明
+7.售后服务响应时间是否与采购文件一致
+
+六、得分项检查
+1.评分标准中是否有要求提供业绩案例，如有要求，投标文件是否有提供相应数量的业绩或案例
+2.评分标准中是否有要求提供ISO等商务资质，如有要求，投标文件是否有提供相应数量的商务资质
+3.评分标准中是否有要求提供软著或者专利，如有要求，投标文件是否有提供相应的软著或者专利
+4.评分表中列出的各种方案（例如技术方案、项目实施方案、售后服务方案、项目培训方案、质量保证方案等），是否按照招标文件要求提供，并按照评分项列出子项
+
+以上项目检查完毕后生成检查报告，提供检查报告，包含如下内容：
+1.风险等级分为：高（可能导致废标）、中（响应不完整/不一致）、低（笔误/表述优化）
+2.按照上述维度列出每个问题、风险等级和修改建议
+3.始终以采购文件为准进行检查，不自行推断要求
+4.按照评分标准要求给出模拟评分`;
+
+    const bidCompareTab = ref('check');
+    const bidCheckProjectId = ref('');
+    const bidCheckFile = ref(null);
+    const bidCheckDragover = ref(false);
+    const bidCheckPrompt = ref(BID_CHECK_DEFAULT_PROMPT);
+    const bidCheckRunning = ref(false);
+    const bidCheckResult = ref(null);
+    const bidCheckDownloading = ref(false);
+    const bidCheckFileInput = ref(null);
+    const BID_CHECK_MAX_SIZE = 200 * 1024 * 1024; // 200MB
+
+    const bidCheckStat = computed(() => {
+      const stat = { high: 0, medium: 0, low: 0, pass: 0 };
+      const items = (bidCheckResult.value && bidCheckResult.value.items) || [];
+      for (const it of items) {
+        const r = it.risk_level;
+        if (r === '高') stat.high++;
+        else if (r === '中') stat.medium++;
+        else if (r === '低') stat.low++;
+        else stat.pass++;
+      }
+      return stat;
+    });
+
+    const getBidCheckRiskLabel = (risk) => {
+      const map = { '高': '高风险', '中': '中风险', '低': '低风险', '符合': '符合' };
+      return map[risk] || risk;
+    };
+
+    const triggerBidCheckFileInput = () => {
+      if (!bidCheckFile.value) bidCheckFileInput.value && bidCheckFileInput.value.click();
+    };
+
+    const addBidCheckFile = (file) => {
+      if (!file) return;
+      const name = file.name.toLowerCase();
+      if (!name.endsWith('.docx')) {
+        alert('投标响应文件仅支持 .docx 格式');
+        return;
+      }
+      if (file.size > BID_CHECK_MAX_SIZE) {
+        alert('文件大小超过 200MB 限制');
+        return;
+      }
+      bidCheckFile.value = file;
+    };
+
+    const handleBidCheckFileChange = (e) => {
+      const file = e.target.files && e.target.files[0];
+      if (file) addBidCheckFile(file);
+      e.target.value = '';
+    };
+
+    const handleBidCheckFileDrop = (e) => {
+      bidCheckDragover.value = false;
+      const file = e.dataTransfer.files && e.dataTransfer.files[0];
+      if (file) addBidCheckFile(file);
+    };
+
+    const removeBidCheckFile = () => {
+      bidCheckFile.value = null;
+    };
+
+    const onBidCheckProjectChange = () => {
+      // 切换项目时仅清空已有结果，保留文件与提示词
+      bidCheckResult.value = null;
+    };
+
+    const resetBidCheckForm = () => {
+      bidCheckProjectId.value = '';
+      bidCheckFile.value = null;
+      bidCheckPrompt.value = BID_CHECK_DEFAULT_PROMPT;
+      bidCheckResult.value = null;
+    };
+
+    const resetBidCheckResult = () => {
+      bidCheckResult.value = null;
+    };
+
+    const runBidCheck = async () => {
+      if (!bidCheckProjectId.value || !bidCheckFile.value || !bidCheckPrompt.value.trim()) return;
+      bidCheckRunning.value = true;
+      bidCheckResult.value = null;
+      try {
+        const form = new FormData();
+        form.append('project_id', bidCheckProjectId.value);
+        form.append('prompt', bidCheckPrompt.value);
+        form.append('file', bidCheckFile.value);
+        const res = await fetch('/api/bid-check/run', { method: 'POST', body: form });
+        const text = await res.text();
+        let data;
+        try { data = JSON.parse(text); }
+        catch { alert('服务器返回异常，请刷新页面后重试'); return; }
+        if (!data.success) {
+          alert(data.message || '检查失败');
+          return;
+        }
+        bidCheckResult.value = data;
+      } catch (e) {
+        console.error('投标文件检查失败:', e);
+        alert('检查失败：' + (e.message || e));
+      } finally {
+        bidCheckRunning.value = false;
+      }
+    };
+
+    const downloadBidCheckReport = async () => {
+      if (!bidCheckResult.value) return;
+      bidCheckDownloading.value = true;
+      try {
+        const r = bidCheckResult.value;
+        const res = await fetch('/api/bid-check/download', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            project_name: r.project_name,
+            bid_file_name: r.bid_file_name,
+            checked_at: r.checked_at,
+            summary: r.summary,
+            items: r.items,
+            mock_score: r.mock_score,
+            truncated: r.truncated,
+          }),
+        });
+        if (!res.ok) {
+          let msg = '下载失败';
+          try { const j = await res.json(); msg = j.message || msg; } catch {}
+          alert(msg);
+          return;
+        }
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        const cd = res.headers.get('Content-Disposition') || '';
+        const m = cd.match(/filename\*?=(?:UTF-8'')?["']?([^"';]+)/i);
+        a.download = m ? decodeURIComponent(m[1]) : '投标文件检查报告.docx';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      } catch (e) {
+        console.error('下载报告失败:', e);
+        alert('下载报告失败：' + (e.message || e));
+      } finally {
+        bidCheckDownloading.value = false;
+      }
+    };
+
     // ── 导航 ─────────────────────────────────────────────────
     const setView = (id) => {
       activeView.value = id;
@@ -1704,6 +1907,13 @@ createApp({
       handlePerfFileChange, handlePerfFileDrop, addPerf, deletePerf,
       openEditPerf, saveEditPerf, downloadPerfFile, batchDownloadPerf,
       doDownloadPerfWithWatermark, toggleAllPerfSelect,
+      // 投标比对 - 文件检查
+      bidCompareTab, bidCheckProjectId, bidCheckFile, bidCheckDragover, bidCheckPrompt,
+      bidCheckRunning, bidCheckResult, bidCheckDownloading, bidCheckFileInput,
+      bidCheckStat, getBidCheckRiskLabel,
+      triggerBidCheckFileInput, handleBidCheckFileChange, handleBidCheckFileDrop,
+      removeBidCheckFile, onBidCheckProjectChange,
+      resetBidCheckForm, resetBidCheckResult, runBidCheck, downloadBidCheckReport,
     };
   },
 }).mount('#app');

@@ -3802,3 +3802,368 @@ html, body {
   background: var(--mac-mint-light);
   cursor: default;
 }
+
+/* ═══ 投标比对 - 文件检查 ═══ */
+.bid-check-view .bid-check-tabs {
+  margin-bottom: var(--sp-4);
+}
+
+.bid-check-content {
+  max-width: 900px;
+}
+
+.bid-check-form-card {
+  background: white;
+  border: 1.5px solid var(--gray-200);
+  border-radius: var(--radius-lg);
+  padding: var(--sp-5);
+}
+
+.bid-check-upload-zone {
+  border: 2px dashed var(--gray-300);
+  border-radius: var(--radius-lg);
+  padding: var(--sp-5);
+  text-align: center;
+  cursor: pointer;
+  transition: all var(--t-fast);
+  background: var(--gray-50);
+}
+
+.bid-check-upload-zone:hover {
+  border-color: var(--mac-purple);
+  background: var(--mac-purple-light);
+}
+
+.bid-check-upload-zone--active {
+  border-color: var(--mac-purple);
+  background: var(--mac-purple-light);
+}
+
+.bid-check-upload-zone--done {
+  border-color: var(--mac-mint-deep);
+  background: var(--mac-mint-light);
+  cursor: default;
+}
+
+.bid-check-upload-zone .upload-done {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  justify-content: center;
+  color: var(--mac-mint-deep);
+  font-size: 13px;
+  flex-wrap: wrap;
+}
+
+.bid-check-file-size {
+  color: var(--gray-400);
+  font-size: 12px;
+}
+
+.bid-check-prompt-area {
+  resize: vertical;
+  font-family: inherit;
+  line-height: 1.6;
+  min-height: 180px;
+}
+
+.bid-check-form-actions {
+  display: flex;
+  gap: var(--sp-3);
+  margin-top: var(--sp-4);
+}
+
+/* 运行中 */
+.bid-check-loading {
+  background: white;
+  border: 1.5px solid var(--gray-200);
+  border-radius: var(--radius-lg);
+  padding: var(--sp-8) var(--sp-5);
+  text-align: center;
+  color: var(--gray-500);
+}
+
+.bid-check-loading .spinner {
+  color: var(--mac-purple);
+  margin-bottom: var(--sp-3);
+}
+
+.bid-check-loading-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--gray-700);
+  margin-bottom: var(--sp-2);
+}
+
+.bid-check-loading-desc {
+  font-size: 13px;
+  color: var(--gray-400);
+}
+
+/* 结果区 */
+.bid-check-result {
+  background: white;
+  border: 1.5px solid var(--gray-200);
+  border-radius: var(--radius-lg);
+  padding: var(--sp-5);
+}
+
+.bid-check-result-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+  padding-bottom: var(--sp-4);
+  border-bottom: 1px solid var(--gray-100);
+  margin-bottom: var(--sp-4);
+}
+
+.bid-check-result-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--gray-800);
+  margin: 0 0 var(--sp-2) 0;
+}
+
+.bid-check-result-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-4);
+  font-size: 12px;
+  color: var(--gray-500);
+}
+
+.bid-check-result-actions {
+  display: flex;
+  gap: var(--sp-2);
+  flex-shrink: 0;
+}
+
+/* 统计卡片 */
+.bid-check-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-4);
+}
+
+.bid-check-stat {
+  border-radius: var(--radius-md);
+  padding: var(--sp-3) var(--sp-4);
+  text-align: center;
+}
+
+.bid-check-stat-num {
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.bid-check-stat-label {
+  font-size: 12px;
+  color: var(--gray-500);
+  margin-top: 2px;
+}
+
+.bid-check-stat--high {
+  background: oklch(96% 0.04 25);
+}
+.bid-check-stat--high .bid-check-stat-num { color: var(--color-danger); }
+
+.bid-check-stat--medium {
+  background: var(--mac-peach-light);
+}
+.bid-check-stat--medium .bid-check-stat-num { color: oklch(60% 0.16 55); }
+
+.bid-check-stat--low {
+  background: oklch(95% 0.05 85);
+}
+.bid-check-stat--low .bid-check-stat-num { color: oklch(58% 0.13 85); }
+
+.bid-check-stat--pass {
+  background: var(--mac-mint-light);
+}
+.bid-check-stat--pass .bid-check-stat-num { color: var(--mac-mint-deep); }
+
+.bid-check-truncate-note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--mac-sky-light);
+  color: oklch(45% 0.10 230);
+  font-size: 12px;
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--sp-4);
+}
+
+/* 总体评估 */
+.bid-check-summary {
+  margin-bottom: var(--sp-4);
+}
+
+.bid-check-summary h4 {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--gray-700);
+  margin: 0 0 var(--sp-2) 0;
+}
+
+.bid-check-summary p {
+  font-size: 13px;
+  color: var(--gray-600);
+  line-height: 1.7;
+  margin: 0;
+  background: var(--gray-50);
+  padding: var(--sp-3);
+  border-radius: var(--radius-md);
+}
+
+/* 检查明细 */
+.bid-check-items h4 {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--gray-700);
+  margin: 0 0 var(--sp-3) 0;
+}
+
+.bid-check-item {
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-md);
+  padding: var(--sp-3) var(--sp-4);
+  margin-bottom: var(--sp-3);
+}
+
+.bid-check-item-header {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+  margin-bottom: var(--sp-2);
+}
+
+.bid-check-item-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--gray-800);
+}
+
+.bid-check-conc {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: var(--radius-full);
+  flex-shrink: 0;
+}
+
+.bid-check-conc--高 {
+  background: oklch(96% 0.04 25);
+  color: var(--color-danger);
+}
+
+.bid-check-conc--中 {
+  background: var(--mac-peach-light);
+  color: oklch(60% 0.16 55);
+}
+
+.bid-check-conc--低 {
+  background: oklch(95% 0.05 85);
+  color: oklch(58% 0.13 85);
+}
+
+.bid-check-conc--符合 {
+  background: var(--mac-mint-light);
+  color: var(--mac-mint-deep);
+}
+
+.bid-check-item-detail {
+  font-size: 13px;
+  color: var(--gray-600);
+  line-height: 1.7;
+  white-space: pre-wrap;
+}
+
+.bid-check-item-suggestion {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin-top: var(--sp-2);
+  padding-top: var(--sp-2);
+  border-top: 1px dashed var(--gray-200);
+  font-size: 12px;
+  color: var(--mac-purple-deep);
+  line-height: 1.6;
+}
+
+.bid-check-item-suggestion svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+/* 模拟评分 */
+.bid-check-mock-score {
+  margin-bottom: var(--sp-4);
+  background: var(--mac-sky-light);
+  border-radius: var(--radius-md);
+  padding: var(--sp-3) var(--sp-4);
+}
+
+.bid-check-mock-score h4 {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--gray-700);
+  margin: 0 0 var(--sp-3) 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.bid-check-score-total {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--color-info);
+}
+
+.bid-check-score-details {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.bid-check-score-item {
+  background: rgba(255, 255, 255, 0.7);
+  border-radius: var(--radius-sm);
+  padding: var(--sp-2) var(--sp-3);
+}
+
+.bid-check-score-item-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+}
+
+.bid-check-score-item-name {
+  font-weight: 500;
+  color: var(--gray-700);
+}
+
+.bid-check-score-item-val {
+  font-weight: 600;
+  color: var(--color-info);
+}
+
+.bid-check-score-item-reason {
+  font-size: 12px;
+  color: var(--gray-500);
+  margin-top: 4px;
+  line-height: 1.5;
+}
+
+.bid-check-score-note {
+  font-size: 12px;
+  color: var(--gray-500);
+  font-style: italic;
+  margin: var(--sp-2) 0 0 0;
+}

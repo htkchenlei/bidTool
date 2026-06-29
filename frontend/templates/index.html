@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/static/css/main.css?v=2" />
+  <link rel="stylesheet" href="/static/css/main.css?v=4" />
 </head>
 <body>
 <div id="app" v-cloak>
@@ -714,15 +714,179 @@
       </div>
 
       <!-- ▸ 投标比对 -->
-      <div v-if="activeView === 'bid_compare'" class="view-panel">
+      <div v-if="activeView === 'bid_compare'" class="view-panel bid-check-view">
         <div class="page-header">
           <h1 class="page-title">投标比对</h1>
-          <p class="page-subtitle">对比分析多个招标项目的关键信息，辅助投标决策</p>
+          <p class="page-subtitle">对照招标文件要求检查投标响应文件，发现缺漏与风险，生成检查报告</p>
         </div>
-        <div class="empty-state">
-          <svg width="48" height="48" viewBox="0 0 24 24" fill="none"><path d="M9 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h4" stroke="#6b7280" stroke-width="1.5" stroke-linecap="round"/><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" stroke="#6b7280" stroke-width="1.5" stroke-linecap="round"/><path d="M12 3v18" stroke="#6b7280" stroke-width="1.5" stroke-dasharray="3 3"/></svg>
-          <p class="empty-title">暂无对比数据</p>
-          <p class="empty-desc">从「招标分析」中选择项目添加到对比队列</p>
+
+        <!-- 子功能标签 -->
+        <div class="project-tabs bid-check-tabs">
+          <button class="project-tab" :class="{'project-tab--active': bidCompareTab === 'check'}" @click="bidCompareTab = 'check'">文件检查</button>
+          <button class="project-tab" :class="{'project-tab--active': bidCompareTab === 'score'}" @click="bidCompareTab = 'score'">模拟评分</button>
+        </div>
+
+        <!-- 文件检查 -->
+        <div v-if="bidCompareTab === 'check'" class="bid-check-content">
+          <!-- 配置 / 上传区 -->
+          <div v-if="!bidCheckResult && !bidCheckRunning" class="bid-check-form-card">
+            <div class="form-group">
+              <label class="form-label">招标项目 <span style="color:#e5484d">*</span></label>
+              <select class="form-input form-input--lg" v-model="bidCheckProjectId" @change="onBidCheckProjectChange">
+                <option value="">请选择已分析的招标项目</option>
+                <option v-for="proj in projects" :key="proj.id" :value="proj.id">
+                  {{ proj.name }}（{{ getProjectStatusLabel(proj.status) }}）
+                </option>
+              </select>
+              <p class="form-hint">仅可选择已存在项目；若项目尚未分析，请先到「招标分析」完成分析。</p>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">投标响应文件 <span style="color:#e5484d">*</span></label>
+              <div class="bid-check-upload-zone"
+                :class="{ 'bid-check-upload-zone--active': bidCheckDragover, 'bid-check-upload-zone--done': bidCheckFile }"
+                @click="triggerBidCheckFileInput"
+                @dragover.prevent="bidCheckDragover = true"
+                @dragleave.prevent="bidCheckDragover = false"
+                @drop.prevent="handleBidCheckFileDrop">
+                <input type="file" ref="bidCheckFileInput" accept=".docx" style="display:none" @change="handleBidCheckFileChange" />
+                <div v-if="!bidCheckFile" class="upload-prompt">
+                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                    <polyline points="17,8 12,3 7,8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                    <line x1="12" y1="3" x2="12" y2="15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                  </svg>
+                  <div class="upload-prompt-title">点击或拖拽上传投标响应文件</div>
+                  <div class="upload-prompt-desc">仅支持 .docx 格式，文件大小不超过 200MB</div>
+                </div>
+                <div v-else class="upload-done">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><polyline points="20,6 9,17 4,12" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  <span>{{ bidCheckFile.name }}</span>
+                  <span class="bid-check-file-size">{{ formatFileSize(bidCheckFile.size) }}</span>
+                  <button class="icon-btn icon-btn--danger icon-btn--sm" @click.stop="removeBidCheckFile" title="移除">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">检查提示词 <span style="color:#e5484d">*</span></label>
+              <textarea class="form-input bid-check-prompt-area" v-model="bidCheckPrompt" rows="12" placeholder="请输入检查提示词..."></textarea>
+              <p class="form-hint">提示词可自行修改，将作为 AI 检查的依据。</p>
+            </div>
+
+            <div class="bid-check-form-actions">
+              <button class="btn btn--primary btn--lg" @click="runBidCheck"
+                :disabled="!bidCheckProjectId || !bidCheckFile || !bidCheckPrompt.trim()">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><polyline points="22,12 18,12 15,21 9,3 6,12 2,12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                开始检查
+              </button>
+              <button class="btn btn--ghost" @click="resetBidCheckForm">清空</button>
+            </div>
+          </div>
+
+          <!-- 运行中 -->
+          <div v-else-if="bidCheckRunning" class="bid-check-loading">
+            <svg class="spinner" width="40" height="40" viewBox="0 0 24 24" fill="none">
+              <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" opacity="0.25"/>
+              <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+            </svg>
+            <div class="bid-check-loading-title">正在检查投标响应文件…</div>
+            <div class="bid-check-loading-desc">AI 正在对照招标文件逐项核查，文件较大时可能需要 1-2 分钟，请勿离开页面</div>
+          </div>
+
+          <!-- 结果区 -->
+          <div v-else class="bid-check-result">
+            <div class="bid-check-result-header">
+              <div>
+                <h3 class="bid-check-result-title">检查结果</h3>
+                <div class="bid-check-result-meta">
+                  <span><strong>招标项目：</strong>{{ bidCheckResult.project_name }}</span>
+                  <span><strong>投标文件：</strong>{{ bidCheckResult.bid_file_name }}</span>
+                  <span><strong>检查时间：</strong>{{ bidCheckResult.checked_at }}</span>
+                  <span v-if="bidCheckResult.model"><strong>模型：</strong>{{ bidCheckResult.model }}</span>
+                </div>
+              </div>
+              <div class="bid-check-result-actions">
+                <button class="btn btn--primary" @click="downloadBidCheckReport" :disabled="bidCheckDownloading">
+                  <svg v-if="!bidCheckDownloading" width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><polyline points="7,10 12,15 17,10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><line x1="12" y1="15" x2="12" y2="3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                  {{ bidCheckDownloading ? '生成中...' : '下载报告 (DOCX)' }}
+                </button>
+                <button class="btn btn--outline" @click="resetBidCheckResult">重新检查</button>
+              </div>
+            </div>
+
+            <!-- 统计 -->
+            <div class="bid-check-stats">
+              <div class="bid-check-stat bid-check-stat--high">
+                <div class="bid-check-stat-num">{{ bidCheckStat.high }}</div>
+                <div class="bid-check-stat-label">高风险</div>
+              </div>
+              <div class="bid-check-stat bid-check-stat--medium">
+                <div class="bid-check-stat-num">{{ bidCheckStat.medium }}</div>
+                <div class="bid-check-stat-label">中风险</div>
+              </div>
+              <div class="bid-check-stat bid-check-stat--low">
+                <div class="bid-check-stat-num">{{ bidCheckStat.low }}</div>
+                <div class="bid-check-stat-label">低风险</div>
+              </div>
+              <div class="bid-check-stat bid-check-stat--pass">
+                <div class="bid-check-stat-num">{{ bidCheckStat.pass }}</div>
+                <div class="bid-check-stat-label">符合</div>
+              </div>
+            </div>
+
+            <div v-if="bidCheckResult.truncated" class="bid-check-truncate-note">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="1.8"/><line x1="12" y1="16" x2="12" y2="12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="12" cy="8" r="1" fill="currentColor"/></svg>
+              因文件篇幅较大，已对招标/投标文件内容做截取处理，部分内容未被纳入 AI 检查。
+            </div>
+
+            <!-- 总体评估 -->
+            <div class="bid-check-summary">
+              <h4>总体评估</h4>
+              <p>{{ bidCheckResult.summary }}</p>
+            </div>
+
+            <!-- 模拟评分 -->
+            <div v-if="bidCheckResult.mock_score" class="bid-check-mock-score">
+              <h4>模拟评分<span class="bid-check-score-total">{{ bidCheckResult.mock_score.total_score }} / {{ bidCheckResult.mock_score.max_score }}</span></h4>
+              <div v-if="bidCheckResult.mock_score.details && bidCheckResult.mock_score.details.length" class="bid-check-score-details">
+                <div v-for="(d, i) in bidCheckResult.mock_score.details" :key="i" class="bid-check-score-item">
+                  <div class="bid-check-score-item-head">
+                    <span class="bid-check-score-item-name">{{ d.item }}</span>
+                    <span class="bid-check-score-item-val">{{ d.score }} / {{ d.max_score }}</span>
+                  </div>
+                  <div v-if="d.reason" class="bid-check-score-item-reason">{{ d.reason }}</div>
+                </div>
+              </div>
+              <p v-if="bidCheckResult.mock_score.note" class="bid-check-score-note">{{ bidCheckResult.mock_score.note }}</p>
+            </div>
+
+            <!-- 检查明细 -->
+            <div class="bid-check-items">
+              <h4>检查明细（共 {{ bidCheckResult.items.length }} 项）</h4>
+              <div v-for="(item, idx) in bidCheckResult.items" :key="idx" class="bid-check-item">
+                <div class="bid-check-item-header">
+                  <span class="bid-check-conc" :class="'bid-check-conc--' + item.risk_level">{{ getBidCheckRiskLabel(item.risk_level) }}</span>
+                  <span class="risk-category">{{ item.category }}</span>
+                  <span class="bid-check-item-title">{{ idx + 1 }}. {{ item.title }}</span>
+                </div>
+                <div class="bid-check-item-detail">{{ item.detail }}</div>
+                <div class="bid-check-item-suggestion" v-if="item.suggestion">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1V18h6v-1.2c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  <span><strong>建议：</strong>{{ item.suggestion }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 模拟评分（占位） -->
+        <div v-else class="empty-state">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none"><path d="M12 2l3 6 6.5 1-4.7 4.6 1.1 6.4L12 17.5 6.1 20l1.1-6.4L2.5 9 9 8z" stroke="#6b7280" stroke-width="1.5" stroke-linejoin="round"/></svg>
+          <p class="empty-title">模拟评分功能即将上线</p>
+          <p class="empty-desc">敬请期待</p>
         </div>
       </div>
 
