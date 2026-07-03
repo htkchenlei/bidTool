@@ -65,22 +65,6 @@ createApp({
           <path d="M12 3v18" stroke="currentColor" stroke-width="1.8" stroke-dasharray="3 3"/>
         </svg>`,
       },
-      {
-        id: 'region',
-        label: '区域查询',
-        icon: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-          <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" stroke="currentColor" stroke-width="1.8"/>
-          <circle cx="12" cy="10" r="3" stroke="currentColor" stroke-width="1.8"/>
-        </svg>`,
-      },
-      {
-        id: 'pricing',
-        label: '报价调整',
-        icon: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-          <line x1="12" y1="1" x2="12" y2="23" stroke="currentColor" stroke-width="1.8"/>
-          <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>`,
-      },
     ]);
 
     const toolNavItems = ref([]);
