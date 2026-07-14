@@ -4463,3 +4463,652 @@ html, body {
   color: var(--gray-600);
   white-space: pre-wrap;
 }
+
+/* ── 模拟评分：分阶段进度展示 ─────────────────────────── */
+.bid-score-progress-wrap {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  width: 100%;
+  max-width: 560px;
+  margin: var(--sp-4) auto 0;
+}
+
+.bid-score-progress-bar {
+  flex: 1;
+  height: 8px;
+  background: var(--gray-200);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.bid-score-progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--mac-purple, #7c3aed), var(--mac-mint-500, #10b981));
+  border-radius: 999px;
+  transition: width 0.4s ease;
+}
+
+.bid-score-progress-percent {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--mac-purple, #7c3aed);
+  min-width: 40px;
+  text-align: right;
+}
+
+.bid-score-stages {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--sp-2) var(--sp-4);
+  margin-top: var(--sp-4);
+}
+
+.bid-score-stage {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--gray-500);
+}
+
+.bid-score-stage-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--gray-300);
+}
+
+.bid-score-stage--active .bid-score-stage-dot {
+  background: var(--mac-purple, #7c3aed);
+  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.18);
+}
+
+.bid-score-stage--active .bid-score-stage-label {
+  color: var(--mac-purple, #7c3aed);
+  font-weight: 600;
+}
+
+.bid-score-stage--done .bid-score-stage-dot {
+  background: var(--mac-mint-500, #10b981);
+}
+
+.bid-score-stage--done .bid-score-stage-label {
+  color: var(--gray-600);
+}
+
+/* ── 模拟评分：评分项分类标签 ─────────────────────────── */
+.bid-score-category-tag {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
+.bid-score-category-tag--price {
+  background: rgba(245, 158, 11, 0.15);
+  color: #b45309;
+}
+
+.bid-score-category-tag--commercial {
+  background: rgba(59, 130, 246, 0.15);
+  color: #1d4ed8;
+}
+
+.bid-score-category-tag--technical {
+  background: rgba(139, 92, 246, 0.15);
+  color: #6d28d9;
+}
+
+/* ── 模拟评分：证据引用与置信度 ─────────────────────────── */
+.bid-score-evidence {
+  margin-top: 4px;
+  padding: 6px 8px;
+  background: var(--gray-50);
+  border-left: 3px solid var(--mac-mint-400, #34d399);
+  border-radius: 0 4px 4px 0;
+  font-size: 12px;
+  color: var(--gray-600);
+  line-height: 1.5;
+}
+
+.bid-score-confidence {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--gray-500);
+}
+
+.bid-score-confidence-bar {
+  display: inline-block;
+  width: 40px;
+  height: 4px;
+  background: var(--gray-200);
+  border-radius: 2px;
+  overflow: hidden;
+  vertical-align: middle;
+}
+
+.bid-score-confidence-bar > span {
+  display: block;
+  height: 100%;
+  background: var(--mac-mint-500, #10b981);
+}
+
+.bid-score-sub-scores {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--gray-500);
+}
+
+.bid-score-sub-score-item {
+  background: var(--gray-100);
+  padding: 1px 6px;
+  border-radius: 3px;
+}
+
+/* ── 模拟评分：审计信息卡片 ─────────────────────────── */
+.bid-score-audit-card {
+  margin-top: var(--sp-5);
+  padding: var(--sp-4);
+  background: var(--gray-50);
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-md);
+}
+
+.bid-score-audit-card h4 {
+  margin: 0 0 var(--sp-3) 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--gray-700);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.bid-score-audit-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: var(--sp-2) var(--sp-4);
+  font-size: 12px;
+}
+
+.bid-score-audit-item {
+  display: flex;
+  gap: 6px;
+}
+
+.bid-score-audit-item-label {
+  color: var(--gray-500);
+  white-space: nowrap;
+}
+
+.bid-score-audit-item-value {
+  color: var(--gray-700);
+  font-weight: 500;
+}
+
+/* ── 模拟评分：步骤头部 ─────────────────────────── */
+.bid-score-step-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: var(--sp-5);
+  padding-bottom: var(--sp-4);
+  border-bottom: 1px solid var(--gray-200);
+}
+
+.bid-score-step-num {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: var(--blue-500);
+  color: white;
+  border-radius: 50%;
+  font-size: 14px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.bid-score-step-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--gray-800);
+}
+
+.bid-score-step-desc {
+  font-size: 13px;
+  color: var(--gray-500);
+  flex: 1;
+}
+
+/* ── 模拟评分：评分标准表格 ─────────────────────────── */
+.bid-score-criteria-table-section {
+  margin-bottom: var(--sp-5);
+}
+
+.bid-score-criteria-table-section h4 {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--gray-700);
+  margin: 0 0 var(--sp-3) 0;
+}
+
+.bid-score-criteria-table-wrap {
+  overflow-x: auto;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--gray-200);
+}
+
+.bid-score-criteria-table {
+  width: 100%;
+  min-width: 800px;
+  border-collapse: collapse;
+}
+
+.bid-score-criteria-table th,
+.bid-score-criteria-table td {
+  padding: 10px 12px;
+  text-align: left;
+  border-bottom: 1px solid var(--gray-100);
+  font-size: 13px;
+}
+
+.bid-score-criteria-table th {
+  background: var(--gray-50);
+  font-weight: 600;
+  color: var(--gray-700);
+  white-space: nowrap;
+}
+
+.bid-score-criteria-table td {
+  color: var(--gray-700);
+}
+
+.bid-score-criteria-table tr:last-child td {
+  border-bottom: none;
+}
+
+.bid-score-criteria-td-num {
+  width: 50px;
+  text-align: center;
+  color: var(--gray-500);
+}
+
+.bid-score-criteria-td-name {
+  font-weight: 500;
+  color: var(--gray-800);
+}
+
+.bid-score-criteria-td-desc {
+  max-width: 400px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bid-score-criteria-td-score {
+  width: 60px;
+  text-align: center;
+  font-weight: 600;
+}
+
+/* ── 模拟评分：图片/文本标签 ─────────────────────────── */
+.bid-score-require-image-tag {
+  display: inline-block;
+  padding: 2px 8px;
+  background: rgba(239, 68, 68, 0.1);
+  color: #dc2626;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.bid-score-require-text-tag {
+  display: inline-block;
+  padding: 2px 8px;
+  background: rgba(34, 197, 94, 0.1);
+  color: #16a34a;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+/* ── 模拟评分：总分展示 ─────────────────────────── */
+.bid-score-total-display {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  margin: var(--sp-6) 0;
+  padding: var(--sp-5);
+  background: linear-gradient(135deg, var(--blue-50) 0%, var(--indigo-50) 100%);
+  border-radius: var(--radius-lg);
+}
+
+.bid-score-total-score {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.bid-score-total-number {
+  font-size: 48px;
+  font-weight: 700;
+  color: var(--blue-600);
+  line-height: 1;
+}
+
+.bid-score-total-divider {
+  font-size: 24px;
+  color: var(--gray-400);
+}
+
+.bid-score-total-max {
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--gray-500);
+}
+
+.bid-score-total-label {
+  font-size: 14px;
+  color: var(--gray-600);
+  font-weight: 500;
+}
+
+.bid-score-total-percent {
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--blue-600);
+}
+
+/* ── 模拟评分：图片证据识别结果 ─────────────────────────── */
+.bid-score-image-evidence {
+  margin-top: 8px;
+  padding: 10px 12px;
+  background: rgba(14, 165, 233, 0.05);
+  border-left: 3px solid var(--sky-500);
+  border-radius: 0 4px 4px 0;
+  font-size: 12px;
+  color: var(--gray-700);
+}
+
+.bid-score-image-evidence-detail {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin-top: 4px;
+}
+
+.bid-score-image-extracted {
+  display: block;
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px dashed var(--gray-200);
+  color: var(--gray-500);
+  font-style: italic;
+}
+
+/* ── 模型切换对话框 ────────────────────────────────────── */
+.model-error-box {
+  background: oklch(96% 0.04 25);
+  border: 1px solid var(--color-danger);
+  border-radius: var(--radius-md);
+  padding: var(--sp-3) var(--sp-4);
+  margin-bottom: var(--sp-4);
+}
+
+.model-error-box p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--color-danger);
+  line-height: 1.6;
+}
+
+/* ── 模拟评分：投标人对比表格 ─────────────────────────── */
+.bid-score-comparison-section {
+  margin-bottom: var(--sp-5);
+}
+
+.bid-score-comparison-section h4 {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--gray-700);
+  margin: 0 0 var(--sp-3) 0;
+}
+
+.bid-score-comparison-table-wrap {
+  overflow-x: auto;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--gray-200);
+}
+
+.bid-score-comparison-table {
+  width: 100%;
+  min-width: 600px;
+  border-collapse: collapse;
+}
+
+.bid-score-comparison-table th,
+.bid-score-comparison-table td {
+  padding: 10px 12px;
+  text-align: center;
+  border-bottom: 1px solid var(--gray-100);
+  font-size: 13px;
+}
+
+.bid-score-comparison-table th {
+  background: var(--gray-50);
+  font-weight: 600;
+  color: var(--gray-700);
+}
+
+.bid-score-comp-th-criteria {
+  text-align: left;
+  min-width: 120px;
+}
+
+.bid-score-comp-th-max {
+  min-width: 50px;
+}
+
+.bid-score-comp-th-bidder {
+  background: var(--blue-50);
+  color: var(--blue-700);
+}
+
+.bid-score-comp-th-score {
+  background: var(--gray-50);
+  min-width: 60px;
+}
+
+.bid-score-comp-th-ratio {
+  background: var(--gray-50);
+  min-width: 60px;
+}
+
+.bid-score-comp-td-criteria {
+  text-align: left;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.bid-score-comp-criteria-name {
+  font-weight: 500;
+  color: var(--gray-800);
+}
+
+.bid-score-comp-require-image {
+  display: inline-block;
+  padding: 1px 6px;
+  background: rgba(239, 68, 68, 0.1);
+  color: #dc2626;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 500;
+}
+
+.bid-score-comp-td-max {
+  font-weight: 600;
+  color: var(--gray-600);
+}
+
+.bid-score-comp-td-score {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.bid-score-comp-td-ratio {
+  color: var(--gray-500);
+  font-size: 12px;
+}
+
+.bid-score-comp-total-row td {
+  background: var(--blue-50);
+  font-weight: 600;
+}
+
+.bid-score-comp-td-total-label {
+  text-align: left;
+  color: var(--blue-700);
+}
+
+.bid-score-comp-td-total-max {
+  color: var(--blue-600);
+}
+
+.bid-score-comp-td-total-score {
+  font-size: 16px;
+}
+
+.bid-score-comp-td-total-ratio {
+  font-size: 13px;
+  color: var(--blue-600);
+}
+
+/* ── 模拟评分：投标人详情 ─────────────────────────── */
+.bid-score-bidder-details {
+  margin-bottom: var(--sp-5);
+}
+
+.bid-score-bidder-details h4 {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--gray-700);
+  margin: 0 0 var(--sp-3) 0;
+}
+
+.bid-score-bidder-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: var(--sp-4);
+  flex-wrap: wrap;
+}
+
+.bid-score-bidder-tab {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: var(--gray-100);
+  border: none;
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--gray-600);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.bid-score-bidder-tab:hover {
+  background: var(--gray-200);
+}
+
+.bid-score-bidder-tab--active {
+  background: var(--blue-500);
+  color: white;
+}
+
+.bid-score-bidder-tab--active .bid-score-bidder-tab-score {
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+}
+
+.bid-score-bidder-tab-score {
+  padding: 2px 8px;
+  background: var(--gray-200);
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.bid-score-bidder-detail-content {
+  background: white;
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-md);
+  padding: var(--sp-4);
+}
+
+.bid-score-bidder-detail-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--sp-4);
+  padding-bottom: var(--sp-3);
+  border-bottom: 1px solid var(--gray-100);
+}
+
+.bid-score-bidder-detail-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--gray-800);
+}
+
+.bid-score-bidder-detail-total {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.bid-score-bidder-detail-total-score {
+  font-size: 32px;
+  font-weight: 700;
+}
+
+.bid-score-bidder-detail-total-divider {
+  font-size: 16px;
+  color: var(--gray-400);
+}
+
+.bid-score-bidder-detail-total-max {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--gray-500);
+}
+
+.bid-score-bidder-detail-scores {
+  margin-bottom: var(--sp-4);
+}
+
+.bid-score-bidder-detail-evaluation {
+  padding-top: var(--sp-3);
+  border-top: 1px solid var(--gray-100);
+}
+
+.bid-score-bidder-detail-evaluation h5 {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--gray-700);
+  margin: 0 0 var(--sp-2) 0;
+}

@@ -9,7 +9,7 @@ import io
 import json
 import tempfile
 from datetime import datetime
-from flask import Blueprint, jsonify, request, send_file
+from flask import Blueprint, jsonify, request, send_file, Response
 
 bid_check_bp = Blueprint("bid_check", __name__)
 
@@ -18,7 +18,6 @@ DATA_DIR = os.path.join(BASE_DIR, "data")
 PARSED_DIR = os.path.join(DATA_DIR, "parsed")
 PROJECTS_FILE = os.path.join(DATA_DIR, "projects.json")
 
-# 投标响应文件大小限制：200MB（multipart 请求预留 10MB 开销）
 MAX_BID_FILE_SIZE = 200 * 1024 * 1024
 
 
@@ -33,11 +32,9 @@ def _load_projects():
 
 
 def _get_tender_content(project_id):
-    """读取项目已解析的招标文件内容（解析JSON + 公告Markdown）"""
     parts = []
     project_parsed_dir = os.path.join(PARSED_DIR, project_id)
 
-    # 公告 markdown
     md_path = os.path.join(project_parsed_dir, "announcement.md")
     if os.path.exists(md_path):
         try:
@@ -48,7 +45,6 @@ def _get_tender_content(project_id):
         except Exception:
             pass
 
-    # 已解析的招标文件
     if os.path.isdir(project_parsed_dir):
         for fname in sorted(os.listdir(project_parsed_dir)):
             if not fname.endswith(".json"):
@@ -80,7 +76,6 @@ def _get_tender_content(project_id):
 
 
 def _truncate(text, max_chars):
-    """文本过长时保留开头 75% 与结尾 25%"""
     if not text or len(text) <= max_chars:
         return text or ""
     head = int(max_chars * 0.75)
@@ -92,11 +87,92 @@ def _truncate(text, max_chars):
     )
 
 
+def _generate_bid_check_stream(messages, model_id, project, original_name, bid_truncated, tender_truncated):
+    """生成流式响应的生成器"""
+    from backend.ai_extractor import _parse_json_response
+    from backend.llm_client import get_all_enabled_model_configs, call_llm
+
+    try:
+        target_model = None
+        if model_id:
+            all_models = get_all_enabled_model_configs()
+            target_model = next((m for m in all_models if str(m.get("id")) == str(model_id)), None)
+
+        if target_model:
+            model_name = target_model.get("name", target_model.get("model", "unknown"))
+            stream_gen = call_llm(messages, temperature=0.1, max_tokens=8000, model_config=target_model, stream=True)
+        else:
+            stream_gen = call_llm(messages, temperature=0.1, max_tokens=8000, stream=True)
+            model_name = ""
+
+        yield json.dumps({"type": "status", "message": "正在分析..."}, ensure_ascii=False) + "\n"
+
+        full_response = ""
+        for chunk in stream_gen:
+            full_response += chunk
+            yield json.dumps({"type": "stream", "chunk": chunk}, ensure_ascii=False) + "\n"
+
+        yield json.dumps({"type": "status", "message": "正在解析结果..."}, ensure_ascii=False) + "\n"
+
+        parsed = _parse_json_response(full_response)
+        if not parsed or not isinstance(parsed, dict):
+            yield json.dumps({
+                "type": "error",
+                "message": "AI 返回格式解析失败，请稍后重试或调整提示词",
+                "available_models": [{"id": m.get("id"), "name": m.get("name")} for m in get_all_enabled_model_configs()]
+            }, ensure_ascii=False) + "\n"
+            return
+
+        summary = str(parsed.get("summary", "")).strip()
+        raw_items = parsed.get("items") or []
+        valid_cats = {"基本信息", "资格项", "完整性", "废标项", "商务和技术文件", "得分项"}
+        valid_risk = {"高", "中", "低", "符合"}
+        norm_items = []
+        for it in raw_items:
+            if not isinstance(it, dict):
+                continue
+            risk = str(it.get("risk_level", "")).strip()
+            if risk not in valid_risk:
+                risk = "低"
+            cat = str(it.get("category", "")).strip()
+            if cat not in valid_cats:
+                cat = "基本信息"
+            norm_items.append({
+                "category": cat,
+                "risk_level": risk,
+                "title": str(it.get("title", "")).strip() or "—",
+                "detail": str(it.get("detail", "")).strip(),
+                "suggestion": str(it.get("suggestion", "")).strip(),
+            })
+
+        yield json.dumps({
+            "type": "complete",
+            "data": {
+                "success": True,
+                "project_name": project.get("name", ""),
+                "bid_file_name": original_name,
+                "checked_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "summary": summary or "检查完成。",
+                "items": norm_items,
+                "truncated": bool(bid_truncated or tender_truncated),
+                "model": model_name,
+            }
+        }, ensure_ascii=False) + "\n"
+
+    except Exception as e:
+        yield json.dumps({
+            "type": "error",
+            "message": "AI 调用失败：" + str(e),
+            "available_models": [{"id": m.get("id"), "name": m.get("name")} for m in get_all_enabled_model_configs()]
+        }, ensure_ascii=False) + "\n"
+
+
 # ── 运行检查 ───────────────────────────────────────────────
 @bid_check_bp.route("/api/bid-check/run", methods=["POST"])
 def run_bid_check():
     project_id = (request.form.get("project_id") or "").strip()
     prompt = (request.form.get("prompt") or "").strip()
+    model_id = request.form.get('model_id')
 
     if "file" not in request.files:
         return jsonify({"success": False, "message": "请上传投标响应文件（docx）"}), 400
@@ -113,12 +189,10 @@ def run_bid_check():
     if ext != ".docx":
         return jsonify({"success": False, "message": "投标响应文件必须为 .docx 格式"}), 400
 
-    # 请求级大小校验（含 multipart 开销）
     cl = request.content_length or 0
     if cl > MAX_BID_FILE_SIZE + 10 * 1024 * 1024:
         return jsonify({"success": False, "message": "文件大小超过 200MB 限制"}), 413
 
-    # 招标项目存在性校验
     projects = _load_projects()
     project = next((p for p in projects if p.get("id") == project_id), None)
     if not project:
@@ -131,7 +205,6 @@ def run_bid_check():
             "message": "该招标项目尚未解析任何招标文件内容，请先在「招标分析」中对该项目执行分析"
         }), 400
 
-    # 保存上传文件到临时目录并解析
     import sys
     sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     from backend.doc_parser import parse_file
@@ -168,13 +241,11 @@ def run_bid_check():
             bid_truncated = True
         bid_text = text
 
-    # 截断招标文件内容
     tender_truncated = False
     if len(tender_content) > 80000:
         tender_content = _truncate(tender_content, 80000)
         tender_truncated = True
 
-    # 构建消息
     system_prompt = (
         "你是一个专业的投标文件检查助手。请严格按照用户给出的检查要求，对照【招标文件内容】与"
         "【投标响应文件内容】逐项核查，并以严格的 JSON 格式输出结果。"
@@ -182,14 +253,6 @@ def run_bid_check():
         "输出格式：\n"
         "{\n"
         '  "summary": "对投标响应文件整体符合性的总体评估（150字以内）",\n'
-        '  "mock_score": {\n'
-        '    "total_score": 模拟评分总得分（数字），\n'
-        '    "max_score": 满分（数字，通常100），\n'
-        '    "details": [\n'
-        '      {"item": "评分项名称", "max_score": 该项满分, "score": 该项得分, "reason": "得分/扣分依据"}\n'
-        '    ],\n'
-        '    "note": "模拟评分说明（若招标文件未提供评分标准则说明无法评分）"\n'
-        '  },\n'
         '  "items": [\n'
         '    {\n'
         '      "category": "检查类别，从以下选择之一：基本信息|资格项|完整性|废标项|商务和技术文件|得分项",\n'
@@ -205,10 +268,7 @@ def run_bid_check():
         "2. 用户的检查要求中每一事项至少产出 1 个 item；若该事项全部符合，则产出 1 个 risk_level=符合 的 item\n"
         "3. items 必须覆盖用户提出的全部检查事项，不得遗漏\n"
         "4. detail 中需指明该结论依据招标文件与投标文件中的哪些内容\n"
-        "5. 始终以采购文件为准进行检查，不自行推断要求\n"
-        "6. mock_score：根据招标文件中的评分标准对投标文件进行模拟评分，若招标文件未提供评分标准，"
-        "total_score 设为0，note 说明无法评分\n"
-        "7. mock_score.details 应覆盖评分标准中的各分项"
+        "5. 始终以采购文件为准进行检查，不自行推断要求"
     )
 
     user_content = (
@@ -223,73 +283,10 @@ def run_bid_check():
         {"role": "user", "content": user_content},
     ]
 
-    try:
-        from backend.ai_extractor import _call_llm_with_fallback, _parse_json_response
-        response, model_name = _call_llm_with_fallback(messages, temperature=0.1, max_tokens=8000)
-    except Exception as e:
-        return jsonify({"success": False, "message": "AI 调用失败：" + str(e)}), 500
-
-    parsed = _parse_json_response(response)
-    if not parsed or not isinstance(parsed, dict):
-        return jsonify({
-            "success": False,
-            "message": "AI 返回格式解析失败，请稍后重试或调整提示词",
-            "raw": (response or "")[:500],
-        }), 500
-
-    summary = str(parsed.get("summary", "")).strip()
-    raw_items = parsed.get("items") or []
-    valid_cats = {"基本信息", "资格项", "完整性", "废标项", "商务和技术文件", "得分项"}
-    valid_risk = {"高", "中", "低", "符合"}
-    norm_items = []
-    for it in raw_items:
-        if not isinstance(it, dict):
-            continue
-        risk = str(it.get("risk_level", "")).strip()
-        if risk not in valid_risk:
-            risk = "低"
-        cat = str(it.get("category", "")).strip()
-        if cat not in valid_cats:
-            cat = "基本信息"
-        norm_items.append({
-            "category": cat,
-            "risk_level": risk,
-            "title": str(it.get("title", "")).strip() or "—",
-            "detail": str(it.get("detail", "")).strip(),
-            "suggestion": str(it.get("suggestion", "")).strip(),
-        })
-
-    # 解析模拟评分
-    mock_score = parsed.get("mock_score")
-    norm_score = None
-    if isinstance(mock_score, dict):
-        norm_score = {
-            "total_score": float(mock_score.get("total_score", 0) or 0),
-            "max_score": float(mock_score.get("max_score", 100) or 100),
-            "details": [],
-            "note": str(mock_score.get("note", "")).strip(),
-        }
-        for d in (mock_score.get("details") or []):
-            if not isinstance(d, dict):
-                continue
-            norm_score["details"].append({
-                "item": str(d.get("item", "")).strip() or "—",
-                "max_score": float(d.get("max_score", 0) or 0),
-                "score": float(d.get("score", 0) or 0),
-                "reason": str(d.get("reason", "")).strip(),
-            })
-
-    return jsonify({
-        "success": True,
-        "project_name": project.get("name", ""),
-        "bid_file_name": original_name,
-        "checked_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "summary": summary or "检查完成。",
-        "items": norm_items,
-        "mock_score": norm_score,
-        "truncated": bool(bid_truncated or tender_truncated),
-        "model": model_name,
-    })
+    return Response(
+        _generate_bid_check_stream(messages, model_id, project, original_name, bid_truncated, tender_truncated),
+        content_type="text/event-stream"
+    )
 
 
 # ── 下载结果报告（docx） ──────────────────────────────────
@@ -310,7 +307,6 @@ def download_bid_check_report():
 
 
 def _build_report_docx(data):
-    """根据检查结果生成 docx 报告，返回 BytesIO"""
     from docx import Document
     from docx.shared import Pt, RGBColor
     from docx.enum.text import WD_ALIGN_PARAGRAPH
@@ -318,17 +314,14 @@ def _build_report_docx(data):
 
     doc = Document()
 
-    # 默认中文字体
     normal = doc.styles['Normal']
     normal.font.name = '宋体'
     normal.font.size = Pt(11)
     normal.element.rPr.rFonts.set(qn('w:eastAsia'), '宋体')
 
-    # 标题
     title = doc.add_heading('投标文件检查报告', level=0)
     title.alignment = WD_ALIGN_PARAGRAPH.CENTER
 
-    # 元信息
     meta = doc.add_paragraph()
     meta.add_run('招标项目：').bold = True
     meta.add_run(data.get('project_name', '—') + '\n')
@@ -341,7 +334,6 @@ def _build_report_docx(data):
 
     doc.add_paragraph('')
 
-    # 总体评估
     doc.add_heading('一、总体评估', level=1)
     doc.add_paragraph(data.get('summary', '—'))
 
@@ -352,41 +344,7 @@ def _build_report_docx(data):
         rn.font.size = Pt(9)
         rn.font.color.rgb = RGBColor(0x99, 0x99, 0x99)
 
-    # 模拟评分
-    mock_score = data.get('mock_score')
-    if mock_score and isinstance(mock_score, dict):
-        doc.add_heading('二、模拟评分', level=1)
-        score_p = doc.add_paragraph()
-        score_p.add_run('模拟总分：').bold = True
-        ts = mock_score.get('total_score', 0)
-        ms = mock_score.get('max_score', 100)
-        score_p.add_run(f'{ts} / {ms}')
-        for run in score_p.runs:
-            run.font.size = Pt(12)
-        details = mock_score.get('details') or []
-        if details:
-            for d in details:
-                dp = doc.add_paragraph()
-                dp.add_run(f"• {d.get('item', '—')}：").bold = True
-                dp.add_run(f"{d.get('score', 0)} / {d.get('max_score', 0)}")
-                reason = d.get('reason', '')
-                if reason:
-                    dp2 = doc.add_paragraph()
-                    rp = dp2.add_run('  ' + reason)
-                    rp.font.size = Pt(10)
-                    rp.font.color.rgb = RGBColor(0x66, 0x66, 0x66)
-        note = mock_score.get('note', '')
-        if note:
-            np_ = doc.add_paragraph()
-            rn = np_.add_run(note)
-            rn.italic = True
-            rn.font.size = Pt(10)
-            rn.font.color.rgb = RGBColor(0x99, 0x99, 0x99)
-        doc.add_paragraph('')
-
-    # 检查明细
-    section_num = '三' if mock_score else '二'
-    doc.add_heading(f'{section_num}、检查明细', level=1)
+    doc.add_heading('二、检查明细', level=1)
     risk_label = {"高": "高风险", "中": "中风险", "低": "低风险", "符合": "符合"}
     risk_color = {
         "高": RGBColor(0xC0, 0x39, 0x2B),
@@ -419,7 +377,6 @@ def _build_report_docx(data):
                 rs.font.size = Pt(10)
             doc.add_paragraph('')
 
-    # 结尾
     footer = doc.add_paragraph()
     rn = footer.add_run('本报告由 BidTool 投标工具 自动生成，仅供评审参考。')
     rn.font.size = Pt(9)

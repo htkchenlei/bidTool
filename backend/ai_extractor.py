@@ -191,40 +191,40 @@ def _call_llm_with_fallback(messages, temperature=0.1, max_tokens=1000):
     """
     调用 LLM，如果激活模型失败则自动回退到其他已启用的模型
     返回: (response_text: str, used_model_name: str)
+    抛出异常时包含详细错误信息和可用模型列表
     """
+    active_model = get_active_model_config()
     all_models = get_all_enabled_model_configs()
+
     if not all_models:
         raise RuntimeError("未配置或启用任何大模型，请先在设置中配置并启用一个模型")
 
     last_error = None
-    for cfg in all_models:
+    failed_models = []
+
+    if active_model:
         try:
-            # 临时替换当前使用的模型配置
-            import backend.llm_client as llm_mod
-            original_get = llm_mod.get_active_model_config
-            llm_mod.get_active_model_config = lambda: cfg
-
-            response = call_llm(messages, temperature=temperature, max_tokens=max_tokens)
-
-            # 恢复原始函数
-            llm_mod.get_active_model_config = original_get
-
-            return response, cfg.get("name", cfg.get("model", "unknown"))
-
+            response = call_llm(messages, temperature=temperature, max_tokens=max_tokens, model_config=active_model)
+            return response, active_model.get("name", active_model.get("model", "unknown"))
         except Exception as e:
             last_error = e
-            # 恢复原始函数（防止异常时未恢复）
-            try:
-                import backend.llm_client as llm_mod
-                if 'original_get' in dir():
-                    llm_mod.get_active_model_config = original_get
-            except:
-                pass
+            failed_models.append({"id": active_model.get("id"), "name": active_model.get("name"), "error": str(e)[:200]})
+
+    for cfg in all_models:
+        if active_model and cfg.get("id") == active_model.get("id"):
+            continue
+        try:
+            response = call_llm(messages, temperature=temperature, max_tokens=max_tokens, model_config=cfg)
+            return response, cfg.get("name", cfg.get("model", "unknown"))
+        except Exception as e:
+            last_error = e
+            failed_models.append({"id": cfg.get("id"), "name": cfg.get("name"), "error": str(e)[:200]})
             continue
 
+    available_models = [{"id": m.get("id"), "name": m.get("name")} for m in all_models]
     raise RuntimeError(
-        f"所有 {len(all_models)} 个已启用模型均调用失败。\n"
-        f"最后一个错误: {last_error}"
+        f"所有模型均调用失败。\n最后一个错误: {last_error}\n"
+        f"可用模型: {json.dumps(available_models, ensure_ascii=False)}"
     )
 
 

@@ -57,12 +57,20 @@ createApp({
         count: null,
       },
       {
-        id: 'bid_compare',
-        label: '投标比对',
+        id: 'bid_check',
+        label: '投标检查',
         icon: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none">
           <path d="M9 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
           <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
           <path d="M12 3v18" stroke="currentColor" stroke-width="1.8" stroke-dasharray="3 3"/>
+        </svg>`,
+      },
+      {
+        id: 'bid_score',
+        label: '模拟评分',
+        icon: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+          <rect x="3" y="4" width="18" height="16" rx="2" stroke="currentColor" stroke-width="1.8"/>
+          <path d="M7 14h10M7 10h10M7 6h6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
         </svg>`,
       },
     ]);
@@ -1580,7 +1588,6 @@ createApp({
     const saveSettings = async () => {
       saving.value = true;
       try {
-        // 构建保存时的 payload — 保留 api_key 的处理：如果用户未显式修改，后端会根据 api_key_masked 保留原值
         const payload = modelConfigs.value.map(m => ({
           id: m.id,
           name: m.name,
@@ -1600,123 +1607,295 @@ createApp({
             active_model: activeModel.value,
           }),
         });
-        savedActiveModel.value = activeModel.value; // 保存成功后，顶部栏才更新
+        savedActiveModel.value = activeModel.value;
         toastVisible.value = true;
         setTimeout(() => { toastVisible.value = false; }, 2800);
       } catch {}
       saving.value = false;
     };
 
+    const updateActiveModel = async (model_id) => {
+      try {
+        const payload = modelConfigs.value.map(m => ({
+          id: m.id,
+          name: m.name,
+          api_key: m.api_key || '',
+          api_key_masked: m.api_key_masked || '',
+          base_url: m.base_url,
+          model: m.model,
+          enabled: m.enabled,
+          supports_vision: m.supports_vision,
+          is_custom: m.is_custom,
+        }));
+        await fetch('/api/config', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            models: payload,
+            active_model: model_id,
+          }),
+        });
+        activeModel.value = model_id;
+        savedActiveModel.value = model_id;
+      } catch (e) {
+        console.error('更新默认模型失败:', e);
+      }
+    };
+
     // ── 投标比对 - 模拟评分 ──────────────────────────────────
-    const bidScoreProjectId = ref('');
-    const bidScoreFiles = ref([]);
+    const bidScoreStep = ref(1);
+    const bidScoreTenderFile = ref(null);
+    const bidScoreBidFiles = ref([]);
     const bidScoreDragover = ref(false);
-    const bidScorePrompt = ref('请根据招标文件中的评分标准，对各投标文件逐项打分，并给出详细依据');
     const bidScoreRunning = ref(false);
     const bidScoreResult = ref(null);
+    const bidScoreActiveBidder = ref(0);
     const bidScoreDownloading = ref(false);
     const bidScoreFileInput = ref(null);
+    const bidScoreBidInput = ref(null);
+    const bidScoreCriteria = ref([]);
+    const bidScoreTotalMax = ref(0);
     const BID_SCORE_MAX_SIZE = 200 * 1024 * 1024;
-    const BID_SCORE_MIN_FILES = 3;
-    const BID_SCORE_MAX_FILES = 10;
+    const BID_SCORE_ALLOWED_EXTS = ['.docx', '.pdf'];
+    const bidScoreProgress = ref({ stage: '', message: '', progress: 0 });
+    const bidScoreStagesStep1 = [
+        { key: 'parsing', label: '文件解析' },
+        { key: 'criteria', label: '提取评分标准' },
+    ];
+    const bidScoreStagesStep2 = [
+        { key: 'parsing', label: '解析投标文件' },
+        { key: 'scoring', label: '逐项评分' },
+        { key: 'summary', label: '汇总结果' },
+    ];
+    const bidScoreProjects = ref([]);
+    const bidScoreSelectedProject = ref('');
+    const bidScoreSelectedProjectFiles = ref([]);
 
-    const bidScoreRanking = computed(() => {
-      if (!bidScoreResult.value) return [];
-      return (bidScoreResult.value.ranking || []).map(r => ({
-        ...r,
-        pct: r.total_max ? Math.round(r.total_score / r.total_max * 1000) / 10 : 0,
-      }));
-    });
+    const loadBidScoreProjects = async () => {
+      try {
+        const res = await fetch('/api/projects');
+        const data = await res.json();
+        bidScoreProjects.value = data.projects || [];
+      } catch (e) {
+        console.error('加载项目列表失败:', e);
+      }
+    };
+
+    const onBidScoreProjectChange = async (e) => {
+      const projectId = bidScoreSelectedProject.value;
+      if (!projectId) {
+        bidScoreSelectedProjectFiles.value = [];
+        return;
+      }
+      try {
+        const res = await fetch(`/api/projects/${projectId}/files`);
+        const data = await res.json();
+        const tenderExts = ['.docx', '.pdf'];
+        bidScoreSelectedProjectFiles.value = (data.files || []).filter(f => 
+          tenderExts.includes(f.storage_name?.toLowerCase()?.substring(f.storage_name.lastIndexOf('.')))
+        );
+      } catch (e) {
+        console.error('加载项目文件失败:', e);
+        bidScoreSelectedProjectFiles.value = [];
+      }
+    };
 
     const triggerBidScoreFileInput = () => {
       bidScoreFileInput.value && bidScoreFileInput.value.click();
     };
 
-    const addBidScoreFiles = (files) => {
+    const triggerBidScoreBidInput = () => {
+      bidScoreBidInput.value && bidScoreBidInput.value.click();
+    };
+
+    const handleBidScoreTenderChange = (e) => {
+      const files = Array.from(e.target.files);
+      if (files.length > 0) {
+        const file = files[0];
+        const name = file.name.toLowerCase();
+        const ext = name.substring(name.lastIndexOf('.'));
+        if (!BID_SCORE_ALLOWED_EXTS.includes(ext)) {
+          alert(`文件格式不符，仅支持 ${BID_SCORE_ALLOWED_EXTS.join(' / ')}`);
+          return;
+        }
+        if (file.size > BID_SCORE_MAX_SIZE) {
+          alert('文件超过 200MB 限制');
+          return;
+        }
+        bidScoreTenderFile.value = file;
+      }
+      e.target.value = '';
+    };
+
+    const handleBidScoreBidChange = (e) => {
+      const files = Array.from(e.target.files);
       for (const file of files) {
         const name = file.name.toLowerCase();
-        if (!name.endsWith('.docx')) {
-          alert(`文件 ${file.name} 格式不符，仅支持 .docx`);
+        const ext = name.substring(name.lastIndexOf('.'));
+        if (!BID_SCORE_ALLOWED_EXTS.includes(ext)) {
+          alert(`文件 ${file.name} 格式不符，仅支持 ${BID_SCORE_ALLOWED_EXTS.join(' / ')}`);
           continue;
         }
         if (file.size > BID_SCORE_MAX_SIZE) {
           alert(`文件 ${file.name} 超过 200MB 限制`);
           continue;
         }
-        if (bidScoreFiles.value.length >= BID_SCORE_MAX_FILES) {
-          alert(`最多支持 ${BID_SCORE_MAX_FILES} 份投标文件`);
-          break;
-        }
-        // 避免重复
-        if (!bidScoreFiles.value.some(f => f.name === file.name && f.size === file.size)) {
-          bidScoreFiles.value.push(file);
-        }
+        bidScoreBidFiles.value.push(file);
       }
-    };
-
-    const handleBidScoreFileChange = (e) => {
-      const files = Array.from(e.target.files);
-      if (files.length) addBidScoreFiles(files);
       e.target.value = '';
     };
 
     const handleBidScoreFileDrop = (e) => {
       bidScoreDragover.value = false;
       const files = Array.from(e.dataTransfer.files);
-      if (files.length) addBidScoreFiles(files);
+      for (const file of files) {
+        const name = file.name.toLowerCase();
+        const ext = name.substring(name.lastIndexOf('.'));
+        if (!BID_SCORE_ALLOWED_EXTS.includes(ext)) {
+          alert(`文件 ${file.name} 格式不符，仅支持 ${BID_SCORE_ALLOWED_EXTS.join(' / ')}`);
+          continue;
+        }
+        if (file.size > BID_SCORE_MAX_SIZE) {
+          alert(`文件 ${file.name} 超过 200MB 限制`);
+          continue;
+        }
+        if (bidScoreStep.value === 1) {
+          bidScoreTenderFile.value = file;
+        } else {
+          bidScoreBidFiles.value.push(file);
+        }
+      }
     };
 
-    const removeBidScoreFile = (idx) => {
-      bidScoreFiles.value.splice(idx, 1);
-    };
-
-    const onBidScoreProjectChange = () => {
-      bidScoreResult.value = null;
+    const removeBidScoreBidFile = (index) => {
+      bidScoreBidFiles.value.splice(index, 1);
     };
 
     const resetBidScoreForm = () => {
-      bidScoreProjectId.value = '';
-      bidScoreFiles.value = [];
-      bidScorePrompt.value = '请根据招标文件中的评分标准，对各投标文件逐项打分，并给出详细依据';
+      bidScoreStep.value = 1;
+      bidScoreTenderFile.value = null;
+      bidScoreBidFiles.value = [];
+      bidScoreCriteria.value = [];
+      bidScoreTotalMax.value = 0;
       bidScoreResult.value = null;
+      bidScoreSelectedProject.value = '';
+      bidScoreSelectedProjectFiles.value = [];
     };
 
-    const resetBidScoreResult = () => {
-      bidScoreResult.value = null;
+    const extractScoringCriteriaFromProject = async () => {
+      if (!bidScoreSelectedProject.value) {
+        alert('请选择项目');
+        return;
+      }
+      if (!bidScoreSelectedProjectFiles.value || bidScoreSelectedProjectFiles.value.length === 0) {
+        alert('该项目没有招标文件，请先上传');
+        return;
+      }
+      bidScoreRunning.value = true;
+      try {
+        const form = new FormData();
+        form.append('project_id', bidScoreSelectedProject.value);
+        const res = await fetch('/api/bid-score/extract-criteria', { method: 'POST', body: form });
+        
+        if (!res.ok) {
+          const text = await res.text();
+          let msg = '提取失败';
+          try { const j = JSON.parse(text); msg = j.message || msg; } catch {}
+          alert(msg);
+          return;
+        }
+
+        const data = await res.json();
+        if (data.success) {
+          bidScoreCriteria.value = data.criteria || [];
+          bidScoreTotalMax.value = data.total_max || 0;
+          bidScoreStep.value = 2;
+        } else {
+          alert(data.message || '提取失败');
+        }
+      } catch (e) {
+        console.error('提取评分标准失败:', e);
+        alert('提取失败：' + (e.message || e));
+      } finally {
+        bidScoreRunning.value = false;
+      }
     };
 
-    const runBidScore = async () => {
-      if (!bidScoreProjectId.value) {
-        alert('请选择招标项目');
+    const runBidScore = async (model_id = null) => {
+      if (!bidScoreSelectedProject.value) {
+        alert('请选择项目');
         return;
       }
-      if (bidScoreFiles.value.length < BID_SCORE_MIN_FILES) {
-        alert(`至少需要上传 ${BID_SCORE_MIN_FILES} 份投标文件`);
-        return;
-      }
-      if (!bidScorePrompt.value.trim()) {
-        alert('评分要求不能为空');
+      if (bidScoreBidFiles.value.length === 0) {
+        alert('请上传投标文件');
         return;
       }
       bidScoreRunning.value = true;
       bidScoreResult.value = null;
+      bidScoreProgress.value = { stage: '', message: '准备开始...', progress: 0 };
       try {
         const form = new FormData();
-        form.append('project_id', bidScoreProjectId.value);
-        form.append('prompt', bidScorePrompt.value);
-        for (const f of bidScoreFiles.value) {
-          form.append('files', f);
+        form.append('project_id', bidScoreSelectedProject.value);
+        for (const file of bidScoreBidFiles.value) {
+          form.append('bid_files', file);
+        }
+        if (model_id) form.append('model_id', model_id);
+        if (bidScoreCriteria.value && bidScoreCriteria.value.length > 0) {
+          form.append('criteria', JSON.stringify({ criteria: bidScoreCriteria.value }));
         }
         const res = await fetch('/api/bid-score/run', { method: 'POST', body: form });
-        const text = await res.text();
-        let data;
-        try { data = JSON.parse(text); }
-        catch { alert('服务器返回异常，请刷新页面后重试'); return; }
-        if (!data.success) {
-          alert(data.message || '评分失败');
+        
+        if (!res.ok) {
+          const text = await res.text();
+          let msg = '请求失败';
+          try { const j = JSON.parse(text); msg = j.message || msg; } catch {}
+          alert(msg);
           return;
         }
-        bidScoreResult.value = data;
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder('utf-8');
+        let buffer = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+          
+          for (const line of lines) {
+            if (!line.trim()) continue;
+            try {
+              const data = JSON.parse(line);
+              if (data.type === 'complete') {
+                bidScoreResult.value = data.data;
+                bidScoreActiveBidder.value = 0;
+              } else if (data.type === 'error') {
+                if (data.available_models && data.available_models.length > 0) {
+                  modelSwitchError.value = data.message || '模型调用失败';
+                  modelSwitchOptions.value = data.available_models;
+                  selectedModelId.value = '';
+                  modelSwitchContext.value = 'score';
+                  showModelSwitchModal.value = true;
+                } else {
+                  alert(data.message || '评分失败');
+                }
+                return;
+              } else if (data.type === 'status') {
+                console.log('Score status:', data.message);
+                bidScoreProgress.value = {
+                  stage: data.stage || '',
+                  message: data.message || '',
+                  progress: typeof data.progress === 'number' ? data.progress : 0,
+                };
+              }
+            } catch (e) {
+              console.warn('解析流式消息失败:', e, line);
+            }
+          }
+        }
       } catch (e) {
         console.error('模拟评分失败:', e);
         alert('评分失败：' + (e.message || e));
@@ -1725,25 +1904,21 @@ createApp({
       }
     };
 
+    const getScoreClass = (score, max) => {
+      const pct = score / max;
+      if (pct >= 0.8) return 'bid-check-conc--符合';
+      if (pct >= 0.5) return 'bid-check-conc--中';
+      return 'bid-check-conc--高';
+    };
+
     const downloadBidScoreReport = async () => {
       if (!bidScoreResult.value) return;
       bidScoreDownloading.value = true;
       try {
-        const r = bidScoreResult.value;
         const res = await fetch('/api/bid-score/download', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            project_name: r.project_name,
-            checked_at: r.checked_at,
-            bid_count: r.bid_count,
-            criteria_info: r.criteria_info,
-            bidders: r.bidders,
-            scoring_results: r.scoring_results,
-            plagiarism: r.plagiarism,
-            ranking: r.ranking,
-            truncated: r.truncated,
-          }),
+          body: JSON.stringify(bidScoreResult.value),
         });
         if (!res.ok) {
           let msg = '下载失败';
@@ -1757,7 +1932,7 @@ createApp({
         a.href = url;
         const cd = res.headers.get('Content-Disposition') || '';
         const m = cd.match(/filename\*?=(?:UTF-8'')?["']?([^"';]+)/i);
-        a.download = m ? decodeURIComponent(m[1]) : '投标评分对比报告.docx';
+        a.download = m ? decodeURIComponent(m[1]) : '模拟评分报告.docx';
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
@@ -1821,10 +1996,8 @@ createApp({
 以上项目检查完毕后生成检查报告，提供检查报告，包含如下内容：
 1.风险等级分为：高（可能导致废标）、中（响应不完整/不一致）、低（笔误/表述优化）
 2.按照上述维度列出每个问题、风险等级和修改建议
-3.始终以采购文件为准进行检查，不自行推断要求
-4.按照评分标准要求给出模拟评分`;
+3.始终以采购文件为准进行检查，不自行推断要求`;
 
-    const bidCompareTab = ref('check');
     const bidCheckProjectId = ref('');
     const bidCheckFile = ref(null);
     const bidCheckDragover = ref(false);
@@ -1834,6 +2007,13 @@ createApp({
     const bidCheckDownloading = ref(false);
     const bidCheckFileInput = ref(null);
     const BID_CHECK_MAX_SIZE = 200 * 1024 * 1024; // 200MB
+
+    const showModelSwitchModal = ref(false);
+    const modelSwitchError = ref('');
+    const modelSwitchOptions = ref([]);
+    const selectedModelId = ref('');
+    const pendingBidCheckRequest = ref(null);
+    const modelSwitchContext = ref(''); // 'check' or 'score'
 
     const bidCheckStat = computed(() => {
       const stat = { high: 0, medium: 0, low: 0, pass: 0 };
@@ -1903,7 +2083,7 @@ createApp({
       bidCheckResult.value = null;
     };
 
-    const runBidCheck = async () => {
+    const runBidCheck = async (model_id = null) => {
       if (!bidCheckProjectId.value || !bidCheckFile.value || !bidCheckPrompt.value.trim()) return;
       bidCheckRunning.value = true;
       bidCheckResult.value = null;
@@ -1912,21 +2092,77 @@ createApp({
         form.append('project_id', bidCheckProjectId.value);
         form.append('prompt', bidCheckPrompt.value);
         form.append('file', bidCheckFile.value);
+        if (model_id) form.append('model_id', model_id);
         const res = await fetch('/api/bid-check/run', { method: 'POST', body: form });
-        const text = await res.text();
-        let data;
-        try { data = JSON.parse(text); }
-        catch { alert('服务器返回异常，请刷新页面后重试'); return; }
-        if (!data.success) {
-          alert(data.message || '检查失败');
+        
+        if (!res.ok) {
+          const text = await res.text();
+          let msg = '请求失败';
+          try { const j = JSON.parse(text); msg = j.message || msg; } catch {}
+          alert(msg);
           return;
         }
-        bidCheckResult.value = data;
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder('utf-8');
+        let buffer = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+          
+          for (const line of lines) {
+            if (!line.trim()) continue;
+            try {
+              const data = JSON.parse(line);
+              if (data.type === 'complete') {
+                bidCheckResult.value = data.data;
+              } else if (data.type === 'error') {
+                if (data.available_models && data.available_models.length > 0) {
+                  modelSwitchError.value = data.message || '模型调用失败';
+                  modelSwitchOptions.value = data.available_models;
+                  selectedModelId.value = '';
+                  modelSwitchContext.value = 'check';
+                  showModelSwitchModal.value = true;
+                } else {
+                  alert(data.message || '检查失败');
+                }
+                return;
+              } else if (data.type === 'status') {
+                console.log('Check status:', data.message);
+              }
+            } catch (e) {
+              console.warn('解析流式消息失败:', e, line);
+            }
+          }
+        }
       } catch (e) {
         console.error('投标文件检查失败:', e);
         alert('检查失败：' + (e.message || e));
       } finally {
         bidCheckRunning.value = false;
+      }
+    };
+
+    const closeModelSwitchModal = () => {
+      showModelSwitchModal.value = false;
+      modelSwitchError.value = '';
+      modelSwitchOptions.value = [];
+      selectedModelId.value = '';
+    };
+
+    const confirmModelSwitch = async () => {
+      if (!selectedModelId.value) return;
+      showModelSwitchModal.value = false;
+      await updateActiveModel(selectedModelId.value);
+      if (modelSwitchContext.value === 'score') {
+        await runBidScore(selectedModelId.value);
+      } else {
+        await runBidCheck(selectedModelId.value);
       }
     };
 
@@ -1944,7 +2180,6 @@ createApp({
             checked_at: r.checked_at,
             summary: r.summary,
             items: r.items,
-            mock_score: r.mock_score,
             truncated: r.truncated,
           }),
         });
@@ -1976,6 +2211,9 @@ createApp({
     // ── 导航 ─────────────────────────────────────────────────
     const setView = (id) => {
       activeView.value = id;
+      if (id === 'bid_score') {
+        loadBidScoreProjects();
+      }
     };
 
     // ── 初始化 ───────────────────────────────────────────────
@@ -2030,6 +2268,7 @@ createApp({
       showNewModelModal, newModelForm, newModelTesting, newModelTestResult, newModelCreating,
       newModelShowKey,
       openNewModelModal, resetNewModelForm, testNewModel, createModel, deleteModel,
+      updateActiveModel,
       setView,
       // 区域查询
       regions, biddingList, biddingTotal, biddingPage, biddingPerPage, biddingTotalPages,
@@ -2055,18 +2294,26 @@ createApp({
       openEditPerf, saveEditPerf, downloadPerfFile, batchDownloadPerf,
       doDownloadPerfWithWatermark, toggleAllPerfSelect,
       // 投标比对 - 模拟评分
-      bidScoreProjectId, bidScoreFiles, bidScoreDragover, bidScorePrompt,
-      bidScoreRunning, bidScoreResult, bidScoreDownloading, bidScoreFileInput, bidScoreRanking,
-      triggerBidScoreFileInput, addBidScoreFiles, handleBidScoreFileChange, handleBidScoreFileDrop,
-      removeBidScoreFile, onBidScoreProjectChange,
-      resetBidScoreForm, resetBidScoreResult, runBidScore, downloadBidScoreReport,
-      // 投标比对 - 文件检查
-      bidCompareTab, bidCheckProjectId, bidCheckFile, bidCheckDragover, bidCheckPrompt,
+      bidScoreStep, bidScoreTenderFile, bidScoreBidFiles, bidScoreDragover,
+      bidScoreRunning, bidScoreResult, bidScoreDownloading, bidScoreFileInput, bidScoreBidInput,
+      bidScoreCriteria, bidScoreTotalMax, bidScoreProgress, bidScoreStagesStep1, bidScoreStagesStep2,
+      bidScoreActiveBidder,
+      bidScoreProjects, bidScoreSelectedProject, bidScoreSelectedProjectFiles,
+      triggerBidScoreFileInput, triggerBidScoreBidInput,
+      handleBidScoreTenderChange, handleBidScoreBidChange, handleBidScoreFileDrop,
+      removeBidScoreBidFile,
+      loadBidScoreProjects, onBidScoreProjectChange,
+      resetBidScoreForm, extractScoringCriteriaFromProject, runBidScore, downloadBidScoreReport, getScoreClass,
+      // 投标检查
+    bidCheckProjectId, bidCheckFile, bidCheckDragover, bidCheckPrompt,
       bidCheckRunning, bidCheckResult, bidCheckDownloading, bidCheckFileInput,
       bidCheckStat, getBidCheckRiskLabel,
       triggerBidCheckFileInput, handleBidCheckFileChange, handleBidCheckFileDrop,
       removeBidCheckFile, onBidCheckProjectChange,
       resetBidCheckForm, resetBidCheckResult, runBidCheck, downloadBidCheckReport,
+      // 模型切换对话框
+      showModelSwitchModal, modelSwitchError, modelSwitchOptions, selectedModelId,
+      closeModelSwitchModal, confirmModelSwitch,
     };
   },
 }).mount('#app');

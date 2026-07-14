@@ -106,15 +106,17 @@ def encode_image_to_base64(image_data: bytes) -> str:
     return f"data:image/jpeg;base64,{b64}"
 
 
-def call_llm(messages: list, temperature: float = 0.1, max_tokens: int = 1000) -> str:
+def call_llm(messages: list, temperature: float = 0.1, max_tokens: int = 1000, model_config: dict = None, stream: bool = False) -> str:
     """
     通用 LLM 调用
     :param messages: OpenAI 格式的 messages 列表
     :param temperature: 温度参数（越低越稳定）
     :param max_tokens: 最大输出 token 数
-    :return: 模型回复文本
+    :param model_config: 可选，指定模型配置，不传则使用活动模型配置
+    :param stream: 是否流式输出，True 返回生成器，False 返回完整文本
+    :return: 模型回复文本或生成器
     """
-    cfg = get_active_model_config()
+    cfg = model_config if model_config is not None else get_active_model_config()
     if not cfg:
         raise RuntimeError("未配置或启用大模型，请先在设置中配置并启用一个模型，然后设为默认")
 
@@ -129,67 +131,153 @@ def call_llm(messages: list, temperature: float = 0.1, max_tokens: int = 1000) -
     body = {
         "model": cfg["model"],
         "messages": messages,
-        "temperature": temperature,
         "max_tokens": max_tokens,
+        "stream": stream,
     }
 
-    resp = requests.post(url, headers=headers, json=body, timeout=240)
+    model_lower = cfg["model"].lower()
+    if "claude" not in model_lower:
+        body["temperature"] = temperature
 
-    # 尝试解析响应为 JSON，不管 Content-Type 是什么
-    data = None
     try:
-        data = resp.json()
-    except Exception:
-        # API 返回了非 JSON（可能是 HTML 页面、重定向等）
-        detail = resp.text[:500]
-        if resp.status_code == 200:
-            raise RuntimeError(
-                f"大模型 API 返回了非 JSON 响应 (Content-Type: {resp.headers.get('Content-Type', 'unknown')})。\n"
-                f"可能原因：\n"
-                f"1. API Base URL 不正确（缺少 /v1 后缀？）\n"
-                f"2. 当前 Base URL: {base_url}\n"
-                f"3. 请在设置中测试连接后再使用\n"
-                f"响应内容: {detail[:300]}"
-            )
-        else:
-            raise RuntimeError(
-                f"大模型 API 请求失败 ({resp.status_code})：{detail[:300]}"
-            )
-
-    # 状态码 200 但返回了 error 对象
-    if resp.status_code == 200 and isinstance(data, dict) and "error" in data:
-        error_msg = data["error"].get("message", str(data["error"]))
+        resp = requests.post(url, headers=headers, json=body, timeout=240, stream=True)
+    except Exception as e:
         raise RuntimeError(
-            f"大模型 API 返回错误：{error_msg}\n"
-            f"可能原因：API Key 权限不足、模型名称不正确或余额不足。\n"
-            f"当前模型：{cfg.get('name','')} ({cfg.get('model','')})"
+            f"大模型 API 连接失败：{str(e)}\n"
+            f"当前模型：{cfg.get('name','')} ({cfg.get('model','')})，请检查网络连接和 API 地址"
         )
 
     if resp.status_code != 200:
-        detail = ""
-        if isinstance(data, dict):
-            detail = data.get("error", {}).get("message", str(data))
-        else:
-            detail = resp.text[:300]
+        try:
+            data = resp.json()
+            error_msg = data.get("error", {}).get("message", str(data))
+        except:
+            error_msg = resp.text[:300]
         raise RuntimeError(
-            f"大模型 API 请求失败 ({resp.status_code})：{detail or '请求参数不合法'}\n"
+            f"大模型 API 请求失败 ({resp.status_code})：{error_msg}\n"
             f"当前模型：{cfg.get('name','')} ({cfg.get('model','')})，请检查设置中的模型配置"
         )
 
-    # 提取响应内容
-    if not isinstance(data, dict) or "choices" not in data:
-        raise RuntimeError(
-            f"大模型 API 响应格式不符合预期：缺少 'choices' 字段。\n"
-            f"实际响应（前500字符）: {str(data)[:500]}"
-        )
+    if stream:
+        return _stream_llm_response(resp, cfg)
+    else:
+        content = ""
+        try:
+            data = resp.json()
+            if isinstance(data, dict):
+                if "error" in data:
+                    error_msg = data.get("error", {}).get("message", str(data["error"]))
+                    raise RuntimeError(
+                        f"模型返回错误：{error_msg}\n"
+                        f"当前模型：{cfg.get('name','')} ({cfg.get('model','')})"
+                    )
+                if "choices" in data:
+                    choices = data["choices"]
+                    if isinstance(choices, list) and choices:
+                        first_choice = choices[0]
+                        if isinstance(first_choice, dict):
+                            delta = first_choice.get("delta") or first_choice.get("message") or {}
+                            if isinstance(delta, dict):
+                                content = str(delta.get("content", ""))
+                                if not content:
+                                    content = str(delta.get("reasoning_content", ""))
+        except json.JSONDecodeError:
+            content = ""
 
-    try:
-        return data["choices"][0]["message"]["content"]
-    except (KeyError, IndexError, TypeError) as e:
-        raise RuntimeError(
-            f"大模型 API 响应格式异常 ({e})：无法从 choices 中提取 content。\n"
-            f"完整响应（前500字符）: {str(data)[:500]}"
-        )
+        if not content:
+            content = ""
+            for line in resp.iter_lines():
+                if not line:
+                    continue
+                line_str = line.decode("utf-8")
+                if line_str.startswith("data: "):
+                    line_str = line_str[6:]
+                    if line_str == "[DONE]":
+                        break
+                    try:
+                        data = json.loads(line_str)
+                        if isinstance(data, dict) and "choices" in data:
+                            choices = data["choices"]
+                            if isinstance(choices, list) and choices:
+                                first_choice = choices[0]
+                                if isinstance(first_choice, dict):
+                                    delta = first_choice.get("delta") or {}
+                                    if isinstance(delta, dict):
+                                        content_piece = delta.get("content") or delta.get("reasoning_content")
+                                        if content_piece:
+                                            content += str(content_piece)
+                    except json.JSONDecodeError:
+                        continue
+                    except Exception as e:
+                        raise RuntimeError(
+                            f"解析 LLM 响应时出错：{str(e)}\n"
+                            f"原始响应片段：{line_str[:200]}\n"
+                            f"当前模型：{cfg.get('name','')} ({cfg.get('model','')})"
+                        )
+
+        if not content:
+            raise RuntimeError(
+                f"大模型 API 响应为空。\n"
+                f"当前模型：{cfg.get('name','')} ({cfg.get('model','')})"
+            )
+
+        return content
+
+
+def _stream_llm_response(resp, cfg=None):
+    """流式读取 LLM 响应，返回生成器"""
+    model_name = cfg.get("name", cfg.get("model", "unknown")) if cfg else "unknown"
+    first_data_line = None
+    line_count = 0
+    for line in resp.iter_lines():
+        line_count += 1
+        if not line:
+            continue
+        line_str = line.decode("utf-8")
+        if line_str.startswith("data: "):
+            line_str = line_str[6:]
+            if line_str == "[DONE]":
+                break
+            if not first_data_line:
+                first_data_line = line_str[:500]
+            try:
+                data = json.loads(line_str)
+                if isinstance(data, dict):
+                    if "error" in data:
+                        error_msg = data.get("error", {}).get("message", str(data["error"]))
+                        raise RuntimeError(
+                            f"模型返回错误：{error_msg}\n"
+                            f"当前模型：{model_name}"
+                        )
+                    if "choices" in data:
+                        choices = data["choices"]
+                        print(f"[DEBUG LLM] line {line_count}: choices type={type(choices)}, len={len(choices) if isinstance(choices, list) else 'N/A'}, value={str(choices)[:300]}")
+                        if not isinstance(choices, list) or not choices:
+                            print(f"[DEBUG LLM] line {line_count}: choices is empty or not list, skipping")
+                            continue
+                        first_choice = choices[0]
+                        if not isinstance(first_choice, dict):
+                            print(f"[DEBUG LLM] line {line_count}: first_choice is not dict, skipping")
+                            continue
+                        delta = first_choice.get("delta") or {}
+                        if not isinstance(delta, dict):
+                            print(f"[DEBUG LLM] line {line_count}: delta is not dict, skipping")
+                            continue
+                        content_piece = delta.get("content")
+                        if content_piece:
+                            yield str(content_piece)
+                    else:
+                        print(f"[DEBUG LLM] line {line_count}: missing choices field, skipping. data keys={list(data.keys()) if isinstance(data, dict) else 'N/A'}")
+            except json.JSONDecodeError:
+                continue
+            except RuntimeError:
+                raise
+            except Exception as e:
+                raise RuntimeError(
+                    f"解析 LLM 流式响应时出错：{str(e)}\n"
+                    f"首条数据响应：{first_data_line or '无'}\n"
+                    f"当前模型：{model_name}"
+                )
 
 
 def extract_cert_from_image(image_data: bytes) -> dict:
@@ -283,6 +371,88 @@ def extract_cert_from_text(text: str) -> dict:
 
     response = call_llm(messages, temperature=0.0, max_tokens=500)
     return _parse_json_response(response)
+
+
+def verify_image_evidence(image_data: bytes, criterion: dict, model_config: dict = None) -> dict:
+    """
+    验证图片证据是否符合评分要求
+
+    :param image_data: 图片二进制数据
+    :param criterion: 评分项标准 {"name": "", "description": "", "keywords": []}
+    :param model_config: 模型配置
+    :return: {"cert_name", "cert_type", "issuer", "expire_date", "is_valid", "confidence", "extracted_text"}
+    """
+    cfg = model_config if model_config is not None else get_active_model_config()
+    if not cfg:
+        raise RuntimeError("未配置或启用大模型")
+
+    supports_vision = _model_supports_vision(cfg)
+
+    system_prompt = """你是一位专业的资质证书验证专家。请识别图片中的证书内容并验证其有效性。
+只返回 JSON 对象本身，不要包含 ``` 代码块或任何解释文字。
+
+输出格式：
+{
+  "cert_name": "证书全称",
+  "cert_type": "证书类型",
+  "issuer": "颁发机构",
+  "expire_date": "到期日期(YYYY-MM-DD)",
+  "is_valid": true或false,
+  "confidence": 0.0-1.0,
+  "extracted_text": "图片中提取的关键文字"
+}
+
+要求：
+1. 如果未明确标注有效期，则认为在有效期内（is_valid=true）
+2. 日期格式统一为 YYYY-MM-DD
+3. confidence 表示识别的置信度
+4. extracted_text 提取图片中的关键文字信息
+"""
+
+    criteria_text = f"评分标准：{criterion.get('name', '')}\n描述：{criterion.get('description', '')}\n关键词：{','.join(criterion.get('keywords', []))}"
+
+    if supports_vision:
+        image_url = encode_image_to_base64(image_data)
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": f"{criteria_text}\n请验证这张图片是否符合评分要求"},
+                    {"type": "image_url", "image_url": {"url": image_url}},
+                ],
+            },
+        ]
+    else:
+        ocr_text = _ocr_image_to_text(image_data)
+        if not ocr_text:
+            return {
+                "cert_name": "",
+                "cert_type": "",
+                "issuer": "",
+                "expire_date": "",
+                "is_valid": False,
+                "confidence": 0.0,
+                "extracted_text": "OCR 识别失败，当前模型不支持视觉识别",
+            }
+
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": f"{criteria_text}\n\n请从以下 OCR 提取的内容中验证证书信息：\n\n{ocr_text[:6000]}"},
+        ]
+
+    response = call_llm(messages, temperature=0.0, max_tokens=1000, model_config=cfg)
+    parsed = _parse_json_response(response)
+
+    return {
+        "cert_name": str(parsed.get("cert_name", "")),
+        "cert_type": str(parsed.get("cert_type", "")),
+        "issuer": str(parsed.get("issuer", "")),
+        "expire_date": str(parsed.get("expire_date", "")),
+        "is_valid": bool(parsed.get("is_valid", False)),
+        "confidence": float(parsed.get("confidence", 0.5) or 0.5),
+        "extracted_text": str(parsed.get("extracted_text", "")),
+    }
 
 
 def _parse_json_response(response: str) -> dict:

@@ -8,14 +8,21 @@ import json
 from datetime import datetime
 
 
-def parse_file(file_path, file_type):
+def parse_file(file_path, file_type, use_markitdown=True):
     """
     解析文件，提取文本内容
-    返回: {
+
+    :param file_path: 文件路径
+    :param file_type: 文件类型 (PDF/DOC/DOCX/IMAGE/TEXT/HTML)
+    :param use_markitdown: 是否使用 markitdown 转换（适用于 DOCX/PDF）
+    :return: {
         "text": "完整文本",
         "pages": [{"page_no": 1, "text": "..."}],
         "tables": [],
-        "page_count": 10
+        "page_count": 10,
+        "markdown": "",
+        "sections": [],
+        "error": None
     }
     """
     result = {
@@ -23,10 +30,20 @@ def parse_file(file_path, file_type):
         "pages": [],
         "tables": [],
         "page_count": 0,
+        "markdown": "",
+        "sections": [],
         "error": None
     }
 
     try:
+        if use_markitdown and file_type in ["PDF", "DOC", "DOCX"]:
+            md_result = _try_markitdown_convert(file_path, file_type)
+            if md_result["success"]:
+                result["markdown"] = md_result["markdown"]
+                result["sections"] = md_result["sections"]
+                result["text"] = md_result.get("text", md_result["markdown"])
+                return result
+
         if file_type == "PDF":
             result = _parse_pdf(file_path)
         elif file_type in ["DOC", "DOCX"]:
@@ -43,6 +60,44 @@ def parse_file(file_path, file_type):
         result["error"] = str(e)
 
     return result
+
+
+def _try_markitdown_convert(file_path, file_type):
+    """
+    尝试使用 markitdown 转换文档
+
+    :param file_path: 文件路径
+    :param file_type: 文件类型
+    :return: {"success": bool, "markdown": str, "sections": list, "text": str, "error": str}
+    """
+    result = {
+        "success": False,
+        "markdown": "",
+        "sections": [],
+        "text": "",
+        "error": None
+    }
+
+    try:
+        from backend.markdown_converter import convert_to_markdown, extract_text_from_markdown
+
+        md_type = file_type if file_type != "DOC" else "DOCX"
+        md_result = convert_to_markdown(file_path, md_type)
+
+        if md_result["success"]:
+            result["success"] = True
+            result["markdown"] = md_result["markdown"]
+            result["sections"] = md_result["sections"]
+            result["text"] = extract_text_from_markdown(md_result["markdown"])
+
+        return result
+
+    except ImportError:
+        result["error"] = "markitdown 未安装"
+        return result
+    except Exception as e:
+        result["error"] = f"markitdown 转换失败: {str(e)}"
+        return result
 
 
 def _parse_pdf(file_path):
