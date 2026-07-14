@@ -287,6 +287,57 @@ def _generate_strengths_weaknesses(scores):
     return strengths, weaknesses
 
 
+def _adjust_scores_by_comparison(bid_results, criteria):
+    bid_count = len(bid_results)
+    if bid_count < 2:
+        return bid_results
+
+    grade_ranges = {
+        2: [(0.90, 1.00), (0.50, 0.89)],
+        3: [(0.90, 1.00), (0.65, 0.89), (0.30, 0.64)],
+        4: [(0.90, 1.00), (0.75, 0.89), (0.50, 0.74), (0.20, 0.49)],
+        5: [(0.90, 1.00), (0.75, 0.89), (0.60, 0.74), (0.40, 0.59), (0.00, 0.39)],
+    }
+    ranges = grade_ranges.get(min(bid_count, 5), grade_ranges[5])
+
+    for criterion in criteria:
+        criterion_name = criterion["name"]
+        max_score = criterion["max_score"]
+
+        scores_with_bid = []
+        for bid_idx, bid_result in enumerate(bid_results):
+            for score in bid_result["scores"]:
+                if score["name"] == criterion_name:
+                    scores_with_bid.append({
+                        "bid_idx": bid_idx,
+                        "original_score": score["score"],
+                        "reason": score.get("reason", ""),
+                        "evidence": score.get("evidence", ""),
+                    })
+                    break
+
+        scores_with_bid.sort(key=lambda x: x["original_score"], reverse=True)
+
+        for rank, item in enumerate(scores_with_bid):
+            grade_idx = min(rank, len(ranges) - 1)
+            lower, upper = ranges[grade_idx]
+
+            adjusted_score = round(max_score * (lower + upper) / 2, 2)
+
+            bid_result = bid_results[item["bid_idx"]]
+            for score in bid_result["scores"]:
+                if score["name"] == criterion_name:
+                    old_score = score["score"]
+                    score["score"] = adjusted_score
+                    score["reason"] = f"[对比调整] {item['reason'] or '综合评定'}（原得分{old_score}，排名第{rank+1}，调整为{adjusted_score}）"
+                    break
+
+    for bid_result in bid_results:
+        bid_result["total_score"] = round(sum(s["score"] for s in bid_result["scores"]), 2)
+
+    return bid_results
+
+
 DEFAULT_CRITERIA = [
     {"id": "1", "name": "技术方案", "max_score": 30, "category": "technical", "requires_image": False, "description": "技术方案完整性与可行性", "keywords": ["技术方案", "实施方案"], "sub_items": []},
     {"id": "2", "name": "商务报价", "max_score": 20, "category": "price", "requires_image": False, "description": "投标报价合理性", "keywords": ["报价", "价格"], "sub_items": []},
@@ -597,7 +648,11 @@ def _generate_bid_score_stream(tender_file, tender_path, tender_file_name, bid_f
 
             all_bid_results.append(bid_result)
 
-        yield json.dumps({"type": "status", "stage": "summary", "message": "汇总评分结果...", "progress": 0.95}, ensure_ascii=False) + "\n"
+        yield json.dumps({"type": "status", "stage": "summary", "message": "汇总评分结果...", "progress": 0.90}, ensure_ascii=False) + "\n"
+
+        if bid_count > 1:
+            yield json.dumps({"type": "status", "stage": "comparison", "message": "正在进行投标人横向对比...", "progress": 0.93}, ensure_ascii=False) + "\n"
+            all_bid_results = _adjust_scores_by_comparison(all_bid_results, criteria)
 
         finished_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         duration = str(datetime.strptime(finished_at, "%Y-%m-%d %H:%M:%S") - datetime.strptime(started_at, "%Y-%m-%d %H:%M:%S"))

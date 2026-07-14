@@ -1685,18 +1685,33 @@ createApp({
       const projectId = bidScoreSelectedProject.value;
       if (!projectId) {
         bidScoreSelectedProjectFiles.value = [];
+        bidScoreCriteria.value = [];
+        bidScoreTotalMax.value = 0;
         return;
       }
       try {
-        const res = await fetch(`/api/projects/${projectId}/files`);
+        const res = await fetch(`/api/projects/${projectId}`);
         const data = await res.json();
-        const tenderExts = ['.docx', '.pdf'];
-        bidScoreSelectedProjectFiles.value = (data.files || []).filter(f => 
-          tenderExts.includes(f.storage_name?.toLowerCase()?.substring(f.storage_name.lastIndexOf('.')))
-        );
+        if (data.success && data.project) {
+          const tenderExts = ['.docx', '.pdf'];
+          bidScoreSelectedProjectFiles.value = (data.files || []).filter(f => 
+            tenderExts.includes(f.storage_name?.toLowerCase()?.substring(f.storage_name.lastIndexOf('.')))
+          );
+          
+          const criteriaInfo = data.project.criteria_info;
+          if (criteriaInfo && criteriaInfo.criteria) {
+            bidScoreCriteria.value = criteriaInfo.criteria;
+            bidScoreTotalMax.value = criteriaInfo.total_max || 0;
+          } else {
+            bidScoreCriteria.value = [];
+            bidScoreTotalMax.value = 0;
+          }
+        }
       } catch (e) {
-        console.error('加载项目文件失败:', e);
+        console.error('加载项目失败:', e);
         bidScoreSelectedProjectFiles.value = [];
+        bidScoreCriteria.value = [];
+        bidScoreTotalMax.value = 0;
       }
     };
 

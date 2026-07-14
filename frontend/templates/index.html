@@ -904,8 +904,51 @@
               </div>
             </div>
 
+            <div v-if="bidScoreCriteria.length > 0" class="form-group">
+              <label class="form-label">评分标准（已提取）</label>
+              <div class="bid-score-criteria-table-wrap">
+                <table class="bid-score-criteria-table">
+                  <thead>
+                    <tr>
+                      <th class="bid-score-criteria-td-num">序号</th>
+                      <th class="bid-score-criteria-td-name">评分项</th>
+                      <th class="bid-score-criteria-td-desc">描述</th>
+                      <th class="bid-score-criteria-td-score">满分</th>
+                      <th>类型</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="(c, idx) in bidScoreCriteria" :key="c.id || idx">
+                      <td class="bid-score-criteria-td-num">{{ idx + 1 }}</td>
+                      <td class="bid-score-criteria-td-name">{{ c.name }}</td>
+                      <td class="bid-score-criteria-td-desc">{{ c.description || '-' }}</td>
+                      <td class="bid-score-criteria-td-score">{{ c.max_score }}</td>
+                      <td>
+                        <span v-if="c.category === 'price'" class="bid-score-require-text-tag">价格</span>
+                        <span v-else-if="c.category === 'commercial'" class="bid-score-require-image-tag">商务</span>
+                        <span v-else class="bid-score-require-text-tag">技术</span>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <div class="bid-score-total-display">
+                <div class="bid-score-total-score">
+                  <span class="bid-score-total-number">{{ bidScoreTotalMax }}</span>
+                  <span class="bid-score-total-divider">/</span>
+                  <span class="bid-score-total-max">{{ bidScoreTotalMax }}</span>
+                </div>
+                <div class="bid-score-total-label">满分</div>
+              </div>
+            </div>
+
             <div class="bid-check-form-actions">
-              <button class="btn btn--primary btn--lg" @click="extractScoringCriteriaFromProject"
+              <button v-if="bidScoreCriteria.length > 0" class="btn btn--primary btn--lg" @click="bidScoreStep = 2"
+                :disabled="!bidScoreSelectedProject">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><polyline points="22,12 18,12 15,21 9,3 6,12 2,12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                下一步（上传投标文件）
+              </button>
+              <button v-else class="btn btn--primary btn--lg" @click="extractScoringCriteriaFromProject"
                 :disabled="!bidScoreSelectedProject || !bidScoreSelectedProjectFiles || bidScoreSelectedProjectFiles.length === 0">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><polyline points="22,12 18,12 15,21 9,3 6,12 2,12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
                 提取评分标准
@@ -1034,14 +1077,6 @@
                 </div>
               </div>
               <div class="bid-check-result-actions">
-                <button class="btn btn--primary" @click="downloadBidScoreReport('docx')" :disabled="bidScoreDownloading">
-                  <svg v-if="!bidScoreDownloading" width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><polyline points="7,10 12,15 17,10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><line x1="12" y1="15" x2="12" y2="3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-                  {{ bidScoreDownloading ? '生成中...' : '下载报告 (DOCX)' }}
-                </button>
-                <button class="btn btn--secondary" @click="downloadBidScoreReport('html')" :disabled="bidScoreDownloading">
-                  <svg v-if="!bidScoreDownloading" width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><polyline points="7,10 12,15 17,10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><line x1="12" y1="15" x2="12" y2="3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-                  {{ bidScoreDownloading ? '生成中...' : '下载报告 (HTML)' }}
-                </button>
                 <button class="btn btn--outline" @click="resetBidScoreForm">重新评分</button>
               </div>
             </div>

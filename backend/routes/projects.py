@@ -1627,6 +1627,33 @@ def analyze_project(project_id):
     if ai_result["risk_success"]:
         _save_risk_items(project_id, ai_result["risks"], parsed_files[0] if parsed_files else None)
 
+    # ═══ Step 5: 提取评分标准（用于模拟评分） ═══
+    criteria_info = None
+    try:
+        import sys as _sys_criteria
+        _sys_criteria.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        from backend.routes.bid_score import _build_criteria_extraction_messages, _normalize_criteria, _parse_json_response
+        from backend.llm_client import call_llm, get_all_enabled_model_configs
+        from backend.ai_extractor import _call_llm_with_fallback
+
+        messages = _build_criteria_extraction_messages("请提取招标文件中的评分标准", combined_text)
+        target_model = None
+        all_models = get_all_enabled_model_configs()
+        for m in all_models:
+            if m.get("id"):
+                target_model = m
+                break
+
+        if target_model:
+            response = call_llm(messages, temperature=0.1, max_tokens=4000, model_config=target_model)
+        else:
+            response, _ = _call_llm_with_fallback(messages, temperature=0.1, max_tokens=4000)
+
+        parsed = _parse_json_response(response)
+        criteria_info = _normalize_criteria(parsed)
+    except Exception as e:
+        print(f"[评分标准提取] 失败: {e}")
+
     # 更新项目状态为已完成
     for i, p in enumerate(projects):
         if p["id"] == project_id:
@@ -1636,6 +1663,8 @@ def analyze_project(project_id):
             project_risks = [r for r in risks if r.get("project_id") == project_id]
             projects[i]["risk_count"] = len(project_risks)
             projects[i]["high_risk_count"] = sum(1 for r in project_risks if r.get("severity") == "high")
+            if criteria_info:
+                projects[i]["criteria_info"] = criteria_info
             break
     save_projects(projects)
 
