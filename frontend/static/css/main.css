@@ -5009,48 +5009,43 @@ html, body {
   margin: 0 0 var(--sp-3) 0;
 }
 
-.bid-score-bidder-tabs {
+.bid-score-bidder-select-wrap {
   display: flex;
-  gap: 8px;
+  justify-content: space-between;
+  align-items: center;
   margin-bottom: var(--sp-4);
-  flex-wrap: wrap;
 }
 
-.bid-score-bidder-tab {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+.bid-score-bidder-select-wrap h4 {
+  margin: 0;
+}
+
+.bid-score-bidder-select {
   padding: 8px 16px;
-  background: var(--gray-100);
-  border: none;
+  background: white;
+  border: 1px solid var(--gray-200);
   border-radius: var(--radius-md);
   font-size: 13px;
   font-weight: 500;
-  color: var(--gray-600);
+  color: var(--gray-700);
   cursor: pointer;
+  min-width: 200px;
   transition: all 0.2s;
 }
 
-.bid-score-bidder-tab:hover {
-  background: var(--gray-200);
+.bid-score-bidder-select:hover:not(:disabled) {
+  border-color: var(--blue-400);
 }
 
-.bid-score-bidder-tab--active {
-  background: var(--blue-500);
-  color: white;
+.bid-score-bidder-select:focus {
+  outline: none;
+  border-color: var(--blue-500);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
 }
 
-.bid-score-bidder-tab--active .bid-score-bidder-tab-score {
-  background: rgba(255, 255, 255, 0.2);
-  color: white;
-}
-
-.bid-score-bidder-tab-score {
-  padding: 2px 8px;
-  background: var(--gray-200);
-  border-radius: 4px;
-  font-size: 12px;
-  font-weight: 600;
+.bid-score-bidder-select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .bid-score-bidder-detail-content {

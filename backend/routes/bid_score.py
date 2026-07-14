@@ -1062,17 +1062,25 @@ def _score_technical(criterion, sections, raw_text, model_name, model_config):
 @bid_score_bp.route("/api/bid-score/download", methods=["POST"])
 def download_bid_score_report():
     data = request.get_json(silent=True) or {}
-    if not data.get("scores"):
+    report_format = data.get("format", "docx")
+    
+    if not data.get("bid_results") and not data.get("scores"):
         return jsonify({"success": False, "message": "报告内容为空"}), 400
 
     try:
-        bio = _build_score_report_docx(data)
+        if report_format == "html":
+            html_content = _build_score_report_html(data)
+            bio = io.BytesIO(html_content.encode('utf-8'))
+            fname = f"模拟评分报告_{datetime.now().strftime('%Y%m%d%H%M%S')}.html"
+            mimetype = "text/html"
+        else:
+            bio = _build_score_report_docx(data)
+            fname = f"模拟评分报告_{datetime.now().strftime('%Y%m%d%H%M%S')}.docx"
+            mimetype = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     except Exception as e:
         return jsonify({"success": False, "message": "报告生成失败：" + str(e)}), 500
 
-    fname = f"模拟评分报告_{datetime.now().strftime('%Y%m%d%H%M%S')}.docx"
-    return send_file(bio, as_attachment=True, download_name=fname,
-                     mimetype="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+    return send_file(bio, as_attachment=True, download_name=fname, mimetype=mimetype)
 
 
 def _build_score_report_docx(data):
@@ -1245,3 +1253,190 @@ def _build_score_report_docx(data):
     doc.save(bio)
     bio.seek(0)
     return bio
+
+
+def _build_score_report_html(data):
+    bid_results = data.get("bid_results") or []
+    criteria = data.get("criteria") or []
+    audit = data.get("audit") or {}
+    timestamp = data.get("timestamp", "")
+
+    html_template = f"""<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>投标文件模拟评分报告</title>
+    <style>
+        * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+        body {{ font-family: "Microsoft YaHei", "PingFang SC", sans-serif; color: #333; background: #f5f5f5; padding: 40px; }}
+        .report-container {{ max-width: 1200px; margin: 0 auto; background: white; padding: 40px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }}
+        .report-title {{ text-align: center; font-size: 24px; font-weight: bold; color: #1a73e8; margin-bottom: 30px; border-bottom: 2px solid #1a73e8; padding-bottom: 15px; }}
+        .report-meta {{ text-align: center; margin-bottom: 30px; font-size: 14px; color: #666; }}
+        .report-meta span {{ margin: 0 15px; }}
+        
+        .section-title {{ font-size: 18px; font-weight: bold; color: #1a73e8; margin: 30px 0 20px; padding-left: 10px; border-left: 4px solid #1a73e8; }}
+        
+        .comparison-table {{ width: 100%; border-collapse: collapse; margin-bottom: 30px; }}
+        .comparison-table th, .comparison-table td {{ border: 1px solid #ddd; padding: 12px 15px; text-align: center; font-size: 13px; }}
+        .comparison-table th {{ background: #f0f4f8; font-weight: bold; color: #333; }}
+        .comparison-table th.criteria-col {{ text-align: left; width: 20%; }}
+        .comparison-table th.bidder-col {{ background: #e3f2fd; color: #1565c0; }}
+        .comparison-table td.criteria-name {{ text-align: left; font-weight: 500; }}
+        .comparison-table td.score-high {{ color: #1565c0; font-weight: bold; }}
+        .comparison-table td.score-medium {{ color: #f57c00; font-weight: bold; }}
+        .comparison-table td.score-low {{ color: #d32f2f; font-weight: bold; }}
+        .comparison-table tr.total-row {{ background: #e3f2fd; font-weight: bold; }}
+        
+        .bidder-detail {{ margin-bottom: 30px; padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px; }}
+        .bidder-header {{ display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 1px solid #e0e0e0; }}
+        .bidder-name {{ font-size: 16px; font-weight: bold; color: #333; }}
+        .bidder-total {{ font-size: 20px; font-weight: bold; color: #1565c0; }}
+        
+        .score-item {{ margin-bottom: 15px; padding: 15px; background: #fafafa; border-radius: 6px; }}
+        .score-item-header {{ display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }}
+        .score-item-name {{ font-weight: 600; font-size: 14px; }}
+        .score-item-score {{ font-size: 16px; font-weight: bold; }}
+        .score-item-reason {{ font-size: 13px; color: #666; margin-top: 5px; }}
+        .score-item-evidence {{ font-size: 12px; color: #999; margin-top: 5px; font-style: italic; }}
+        
+        .evaluation-tags {{ margin-top: 15px; }}
+        .evaluation-tag {{ display: inline-block; padding: 4px 12px; border-radius: 15px; font-size: 12px; margin-right: 8px; margin-bottom: 8px; }}
+        .tag-strength {{ background: #e8f5e9; color: #2e7d32; }}
+        .tag-weakness {{ background: #ffebee; color: #c62828; }}
+        
+        .audit-section {{ margin-top: 30px; padding: 20px; background: #f8f9fa; border-radius: 8px; }}
+        .audit-table {{ width: 100%; border-collapse: collapse; }}
+        .audit-table td {{ padding: 8px 15px; border: 1px solid #ddd; font-size: 13px; }}
+        .audit-table td.label {{ font-weight: bold; background: #e9ecef; width: 30%; }}
+        
+        .disclaimer {{ margin-top: 30px; padding: 15px; background: #fff3e0; border-left: 4px solid #ff9800; font-size: 13px; color: #e65100; }}
+        
+        .footer {{ text-align: center; margin-top: 40px; padding-top: 20px; border-top: 1px solid #ddd; font-size: 12px; color: #999; }}
+        
+        @media print {{
+            body {{ background: white; padding: 20px; }}
+            .report-container {{ box-shadow: none; }}
+        }}
+    </style>
+</head>
+<body>
+    <div class="report-container">
+        <h1 class="report-title">投标文件模拟评分报告</h1>
+        
+        <div class="report-meta">
+            <span><strong>投标人数量：</strong>{len(bid_results)} 家</span>
+            <span><strong>评分时间：</strong>{timestamp or '-'}</span>
+        </div>
+
+        <h2 class="section-title">一、投标人评分对比</h2>
+        <table class="comparison-table">
+            <thead>
+                <tr>
+                    <th rowspan="2" class="criteria-col">评分项</th>
+                    <th rowspan="2">满分</th>
+                    {''.join(f'<th colspan="2" class="bidder-col">{br.get("filename", "-")}</th>' for br in bid_results)}
+                </tr>
+                <tr>
+                    {''.join(f'<th>得分</th><th>比例</th>' for _ in bid_results)}
+                </tr>
+            </thead>
+            <tbody>
+                {''.join(_html_criteria_row(c, bid_results) for c in criteria)}
+                <tr class="total-row">
+                    <td class="criteria-name"><strong>总分</strong></td>
+                    <td>{sum(c["max_score"] for c in criteria)}</td>
+                    {''.join(_html_total_cell(br) for br in bid_results)}
+                </tr>
+            </tbody>
+        </table>
+
+        <h2 class="section-title">二、投标人详细评分</h2>
+        {''.join(_html_bidder_detail(br, criteria) for br in bid_results)}
+
+        <div class="audit-section">
+            <h2 class="section-title">三、审计信息</h2>
+            <table class="audit-table">
+                <tr><td class="label">评分模型</td><td>{audit.get("model", "—")}</td></tr>
+                <tr><td class="label">LLM 调用次数</td><td>{audit.get("llm_calls", "—")}</td></tr>
+                <tr><td class="label">投标人数量</td><td>{audit.get("bid_count", "—")}</td></tr>
+                <tr><td class="label">评分项数量</td><td>{audit.get("criteria_count", "—")}</td></tr>
+                <tr><td class="label">开始时间</td><td>{audit.get("started_at", "—")}</td></tr>
+                <tr><td class="label">完成时间</td><td>{audit.get("finished_at", "—")}</td></tr>
+                <tr><td class="label">耗时</td><td>{audit.get("duration", "—")}</td></tr>
+            </table>
+        </div>
+
+        <div class="disclaimer">
+            ⚠ 模拟评分仅供参考，实际评分以评审专家为准。本报告由 BidTool 投标工具自动生成。
+        </div>
+
+        <div class="footer">
+            本报告由 BidTool 投标工具 自动生成
+        </div>
+    </div>
+</body>
+</html>"""
+    return html_template
+
+
+def _html_criteria_row(criterion, bid_results):
+    max_score = criterion["max_score"]
+    cells = ""
+    for br in bid_results:
+        scores = br.get("scores") or []
+        score = next((s.get("score", 0) for s in scores if s.get("name") == criterion["name"]), 0)
+        pct = round(score / max_score * 100, 0) if max_score > 0 else 0
+        score_class = "score-high" if pct >= 80 else "score-medium" if pct >= 50 else "score-low"
+        cells += f'<td class="{score_class}">{score}</td><td>{pct}%</td>'
+    
+    return f'<tr><td class="criteria-name">{criterion["name"]}</td><td>{max_score}</td>{cells}</tr>'
+
+
+def _html_total_cell(bid_result):
+    total_score = bid_result.get("total_score", 0)
+    total_max = bid_result.get("total_max", 1)
+    pct = round(total_score / total_max * 100, 1) if total_max > 0 else 0
+    score_class = "score-high" if pct >= 80 else "score-medium" if pct >= 50 else "score-low"
+    return f'<td class="{score_class}">{total_score}</td><td>{pct}%</td>'
+
+
+def _html_bidder_detail(bid_result, criteria):
+    filename = bid_result.get("filename", "-")
+    total_score = bid_result.get("total_score", 0)
+    total_max = bid_result.get("total_max", 0)
+    scores = bid_result.get("scores") or []
+    strengths = bid_result.get("strengths") or []
+    weaknesses = bid_result.get("weaknesses") or []
+    
+    score_items = ""
+    for score in scores:
+        max_score = score.get("max_score", 0)
+        pct = round(score.get("score", 0) / max_score * 100, 0) if max_score > 0 else 0
+        score_class = "score-high" if pct >= 80 else "score-medium" if pct >= 50 else "score-low"
+        score_items += f"""
+        <div class="score-item">
+            <div class="score-item-header">
+                <span class="score-item-name">{score.get("name", "-")}</span>
+                <span class="score-item-score {score_class}">{score.get("score", 0)} / {max_score}</span>
+            </div>
+            {f'<div class="score-item-reason"><strong>打分依据：</strong>{score.get("reason", "")}</div>' if score.get("reason") else ''}
+            {f'<div class="score-item-evidence"><strong>引用内容：</strong>{score.get("evidence", "")}</div>' if score.get("evidence") else ''}
+        </div>
+        """
+    
+    strength_tags = ''.join(f'<span class="evaluation-tag tag-strength">{s}</span>' for s in strengths)
+    weakness_tags = ''.join(f'<span class="evaluation-tag tag-weakness">{w}</span>' for w in weaknesses)
+    
+    return f"""
+    <div class="bidder-detail">
+        <div class="bidder-header">
+            <div class="bidder-name">{filename}</div>
+            <div class="bidder-total">{total_score} / {total_max}</div>
+        </div>
+        {score_items}
+        <div class="evaluation-tags">
+            {f'<div><strong>优势：</strong>{strength_tags}</div>' if strengths else ''}
+            {f'<div><strong>不足：</strong>{weakness_tags}</div>' if weaknesses else ''}
+        </div>
+    </div>"""

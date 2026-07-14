@@ -1911,14 +1911,14 @@ createApp({
       return 'bid-check-conc--高';
     };
 
-    const downloadBidScoreReport = async () => {
+    const downloadBidScoreReport = async (format = 'docx') => {
       if (!bidScoreResult.value) return;
       bidScoreDownloading.value = true;
       try {
         const res = await fetch('/api/bid-score/download', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(bidScoreResult.value),
+          body: JSON.stringify({ ...bidScoreResult.value, format }),
         });
         if (!res.ok) {
           let msg = '下载失败';
@@ -1932,7 +1932,7 @@ createApp({
         a.href = url;
         const cd = res.headers.get('Content-Disposition') || '';
         const m = cd.match(/filename\*?=(?:UTF-8'')?["']?([^"';]+)/i);
-        a.download = m ? decodeURIComponent(m[1]) : '模拟评分报告.docx';
+        a.download = m ? decodeURIComponent(m[1]) : `模拟评分报告.${format}`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);

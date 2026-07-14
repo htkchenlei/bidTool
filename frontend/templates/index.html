@@ -1034,9 +1034,13 @@
                 </div>
               </div>
               <div class="bid-check-result-actions">
-                <button class="btn btn--primary" @click="downloadBidScoreReport" :disabled="bidScoreDownloading">
+                <button class="btn btn--primary" @click="downloadBidScoreReport('docx')" :disabled="bidScoreDownloading">
                   <svg v-if="!bidScoreDownloading" width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><polyline points="7,10 12,15 17,10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><line x1="12" y1="15" x2="12" y2="3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
                   {{ bidScoreDownloading ? '生成中...' : '下载报告 (DOCX)' }}
+                </button>
+                <button class="btn btn--secondary" @click="downloadBidScoreReport('html')" :disabled="bidScoreDownloading">
+                  <svg v-if="!bidScoreDownloading" width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><polyline points="7,10 12,15 17,10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><line x1="12" y1="15" x2="12" y2="3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                  {{ bidScoreDownloading ? '生成中...' : '下载报告 (HTML)' }}
                 </button>
                 <button class="btn btn--outline" @click="resetBidScoreForm">重新评分</button>
               </div>
@@ -1097,20 +1101,17 @@
 
             <!-- 投标人详情卡片 -->
             <div class="bid-score-bidder-details">
-              <h4>投标人详情</h4>
-              <div class="bid-score-bidder-tabs">
-                <button 
-                  v-for="(bid, idx) in (bidScoreResult.bid_results || [])" 
-                  :key="idx"
-                  class="bid-score-bidder-tab"
-                  :class="{ 'bid-score-bidder-tab--active': bidScoreActiveBidder === idx }"
-                  @click="bidScoreActiveBidder = idx"
+              <div class="bid-score-bidder-select-wrap">
+                <h4>投标人详情</h4>
+                <select 
+                  v-model="bidScoreActiveBidder" 
+                  class="bid-score-bidder-select"
+                  :disabled="!(bidScoreResult.bid_results && bidScoreResult.bid_results.length)"
                 >
-                  {{ bid.filename || '-' }}
-                  <span class="bid-score-bidder-tab-score" :class="getScoreClass(bid.total_score || 0, bid.total_max || 1)">
-                    {{ bid.total_score || 0 }}/{{ bid.total_max || 0 }}
-                  </span>
-                </button>
+                  <option v-for="(bid, idx) in (bidScoreResult.bid_results || [])" :key="idx" :value="idx">
+                    {{ bid.filename || '-' }} ({{ bid.total_score || 0 }}/{{ bid.total_max || 0 }})
+                  </option>
+                </select>
               </div>
 
               <div v-if="bidScoreResult.bid_results && bidScoreResult.bid_results[bidScoreActiveBidder]" class="bid-score-bidder-detail-content">
