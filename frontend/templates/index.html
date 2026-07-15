@@ -904,6 +904,20 @@
               </div>
             </div>
 
+            <div v-else-if="bidScoreSelectedProject" class="form-group">
+              <label class="form-label">上传招标文件 <span style="color:#e5484d">*</span></label>
+              <div class="bid-check-file-drop-zone" 
+                   :class="{ 'bid-check-file-drop-zone--dragover': bidScoreDragover }"
+                   @dragover.prevent="bidScoreDragover = true"
+                   @dragleave="bidScoreDragover = false"
+                   @drop.prevent="handleBidScoreTenderFileDrop">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><polyline points="17 8 12 3 7 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><line x1="12" y1="3" x2="12" y2="15" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                <div class="bid-check-file-drop-text">点击或拖拽上传招标文件</div>
+                <div class="bid-check-file-drop-hint">支持 .docx / .pdf 格式，单个文件不超过 200MB</div>
+                <input type="file" class="bid-check-file-input" @change="handleBidScoreTenderFileChange" accept=".docx,.pdf" />
+              </div>
+            </div>
+
             <div v-if="bidScoreCriteria.length > 0" class="form-group">
               <label class="form-label">评分标准（已提取）</label>
               <div class="bid-score-criteria-table-wrap">

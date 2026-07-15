@@ -1699,12 +1699,16 @@ createApp({
           );
           
           const criteriaInfo = data.project.criteria_info;
-          if (criteriaInfo && criteriaInfo.criteria) {
+          if (criteriaInfo && criteriaInfo.criteria && criteriaInfo.criteria.length > 0) {
             bidScoreCriteria.value = criteriaInfo.criteria;
             bidScoreTotalMax.value = criteriaInfo.total_max || 0;
           } else {
             bidScoreCriteria.value = [];
             bidScoreTotalMax.value = 0;
+            if (bidScoreSelectedProjectFiles.value && bidScoreSelectedProjectFiles.value.length > 0) {
+              bidScoreRunning.value = true;
+              await extractScoringCriteriaFromProject();
+            }
           }
         }
       } catch (e) {
@@ -1740,6 +1744,60 @@ createApp({
         bidScoreTenderFile.value = file;
       }
       e.target.value = '';
+    };
+
+    const handleBidScoreTenderFileChange = async (e) => {
+      const files = Array.from(e.target.files);
+      if (files.length === 0) return;
+      
+      const file = files[0];
+      const name = file.name.toLowerCase();
+      const ext = name.substring(name.lastIndexOf('.'));
+      if (!BID_SCORE_ALLOWED_EXTS.includes(ext)) {
+        alert(`文件格式不符，仅支持 ${BID_SCORE_ALLOWED_EXTS.join(' / ')}`);
+        return;
+      }
+      if (file.size > BID_SCORE_MAX_SIZE) {
+        alert('文件超过 200MB 限制');
+        return;
+      }
+
+      try {
+        const form = new FormData();
+        form.append('file', file);
+        const res = await fetch(`/api/projects/${bidScoreSelectedProject.value}/files`, { 
+          method: 'POST', 
+          body: form 
+        });
+        
+        if (res.ok) {
+          bidScoreRunning.value = true;
+          await onBidScoreProjectChange();
+        } else {
+          const text = await res.text();
+          let msg = '上传失败';
+          try { const j = JSON.parse(text); msg = j.message || msg; } catch {}
+          alert(msg);
+        }
+      } catch (err) {
+        alert('上传失败：' + (err.message || err));
+      }
+      e.target.value = '';
+    };
+
+    const handleBidScoreTenderFileDrop = (e) => {
+      bidScoreDragover.value = false;
+      const files = Array.from(e.dataTransfer.files);
+      if (files.length > 0) {
+        const file = files[0];
+        const input = document.querySelector('.bid-check-file-input');
+        if (input) {
+          const dataTransfer = new DataTransfer();
+          dataTransfer.items.add(file);
+          input.files = dataTransfer.files;
+          input.dispatchEvent(new Event('change'));
+        }
+      }
     };
 
     const handleBidScoreBidChange = (e) => {

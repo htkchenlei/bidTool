@@ -1630,29 +1630,40 @@ def analyze_project(project_id):
     # ═══ Step 5: 提取评分标准（用于模拟评分） ═══
     criteria_info = None
     try:
+        print(f"[评分标准提取] 开始处理项目: {project_id}")
         import sys as _sys_criteria
         _sys_criteria.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         from backend.routes.bid_score import _build_criteria_extraction_messages, _normalize_criteria, _parse_json_response
         from backend.llm_client import call_llm, get_all_enabled_model_configs
         from backend.ai_extractor import _call_llm_with_fallback
+        print(f"[评分标准提取] 导入依赖成功")
 
         messages = _build_criteria_extraction_messages("请提取招标文件中的评分标准", combined_text)
+        print(f"[评分标准提取] 构建消息成功，消息数: {len(messages)}")
+        
         target_model = None
         all_models = get_all_enabled_model_configs()
         for m in all_models:
             if m.get("id"):
                 target_model = m
                 break
+        print(f"[评分标准提取] 目标模型: {target_model.get('id') if target_model else 'None'}")
 
         if target_model:
             response = call_llm(messages, temperature=0.1, max_tokens=4000, model_config=target_model)
         else:
             response, _ = _call_llm_with_fallback(messages, temperature=0.1, max_tokens=4000)
+        print(f"[评分标准提取] LLM调用完成，响应长度: {len(response) if response else 0}")
 
         parsed = _parse_json_response(response)
+        print(f"[评分标准提取] JSON解析完成，结果类型: {type(parsed).__name__}")
+        
         criteria_info = _normalize_criteria(parsed)
+        print(f"[评分标准提取] 标准化完成，criteria数量: {len(criteria_info.get('criteria', [])) if criteria_info else 0}")
     except Exception as e:
         print(f"[评分标准提取] 失败: {e}")
+        import traceback
+        traceback.print_exc()
 
     # 更新项目状态为已完成
     for i, p in enumerate(projects):
