@@ -1692,7 +1692,7 @@ createApp({
       try {
         const res = await fetch(`/api/projects/${projectId}`);
         const data = await res.json();
-        if (data.success && data.project) {
+        if (data.project) {
           const tenderExts = ['.docx', '.pdf'];
           bidScoreSelectedProjectFiles.value = (data.files || []).filter(f => 
             tenderExts.includes(f.storage_name?.toLowerCase()?.substring(f.storage_name.lastIndexOf('.')))
@@ -1824,6 +1824,23 @@ createApp({
         if (data.success) {
           bidScoreCriteria.value = data.criteria || [];
           bidScoreTotalMax.value = data.total_max || 0;
+          
+          try {
+            await fetch(`/api/projects/${bidScoreSelectedProject.value}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                criteria_info: {
+                  criteria: data.criteria || [],
+                  total_max: data.total_max || 0,
+                  price_rule: data.price_rule || null
+                }
+              })
+            });
+          } catch (saveErr) {
+            console.warn('保存评分标准到项目失败:', saveErr);
+          }
+          
           bidScoreStep.value = 2;
         } else {
           alert(data.message || '提取失败');
@@ -1856,7 +1873,10 @@ createApp({
         }
         if (model_id) form.append('model_id', model_id);
         if (bidScoreCriteria.value && bidScoreCriteria.value.length > 0) {
-          form.append('criteria', JSON.stringify({ criteria: bidScoreCriteria.value }));
+          form.append('criteria', JSON.stringify({ 
+            criteria: bidScoreCriteria.value, 
+            total_max: bidScoreTotalMax.value 
+          }));
         }
         const res = await fetch('/api/bid-score/run', { method: 'POST', body: form });
         

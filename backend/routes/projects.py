@@ -687,7 +687,7 @@ def update_project(project_id):
         if p["id"] == project_id:
             # 更新允许修改的字段
             for key in ["name", "project_no", "purchaser", "agency", "budget_amount",
-                        "max_price", "bid_deadline", "opening_time", "status", "owner", "note"]:
+                        "max_price", "bid_deadline", "opening_time", "status", "owner", "note", "criteria_info"]:
                 if key in body:
                     projects[i][key] = body[key]
             projects[i]["updated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
