@@ -45,4 +45,5 @@ dist/
 
 # Startup scripts
 start.bat
+start.ps1
 run.sh
