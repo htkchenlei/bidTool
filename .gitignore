@@ -42,3 +42,7 @@ dist/
 
 # Design docs (optional)
 2026-06-08-bidding-info-extraction-design.md
+
+# Startup scripts
+start.bat
+run.sh
