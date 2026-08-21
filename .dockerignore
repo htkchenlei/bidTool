@@ -1,0 +1,50 @@
+# Python 缓存
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+.pytest_cache/
+.mypy_cache/
+.venv/
+venv/
+env/
+
+# 编辑器 / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 操作系统
+.DS_Store
+Thumbs.db
+
+# 日志
+*.log
+logs/
+
+# 启动脚本（Windows 专用，容器内不需要）
+start.bat
+start.ps1
+run.py
+
+# 设计文档
+2026-06-08-bidding-info-extraction-design.md
+
+# Git
+.git/
+.gitignore
+
+# Docker 自身文件（避免循环）
+Dockerfile
+Dockerfile.base
+docker-compose.yml
+.dockerignore
+
+# markitdown 缓存
+.markitdown/
+
+# 本地数据（用 volume 挂载，不入镜像）
+data/

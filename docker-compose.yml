@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  bidtool:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: bidtool:latest
+    container_name: bidtool
+    restart: unless-stopped
+    ports:
+      - "15668:5000"
+    volumes:
+      # 数据持久化 - JSON 文件、上传文件、解析结果等全部存放在 data/ 下
+      - ./data:/app/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+# 如需使用外部网络，取消下面的注释
+# networks:
+#   default:
+#     external:
+#       name: your_network_name

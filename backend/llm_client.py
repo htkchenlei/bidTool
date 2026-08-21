@@ -251,28 +251,32 @@ def _stream_llm_response(resp, cfg=None):
                         )
                     if "choices" in data:
                         choices = data["choices"]
-                        print(f"[DEBUG LLM] line {line_count}: choices type={type(choices)}, len={len(choices) if isinstance(choices, list) else 'N/A'}, value={str(choices)[:300]}")
                         if not isinstance(choices, list) or not choices:
-                            print(f"[DEBUG LLM] line {line_count}: choices is empty or not list, skipping")
                             continue
                         first_choice = choices[0]
                         if not isinstance(first_choice, dict):
-                            print(f"[DEBUG LLM] line {line_count}: first_choice is not dict, skipping")
                             continue
                         delta = first_choice.get("delta") or {}
                         if not isinstance(delta, dict):
-                            print(f"[DEBUG LLM] line {line_count}: delta is not dict, skipping")
                             continue
                         content_piece = delta.get("content")
                         if content_piece:
                             yield str(content_piece)
-                    else:
-                        print(f"[DEBUG LLM] line {line_count}: missing choices field, skipping. data keys={list(data.keys()) if isinstance(data, dict) else 'N/A'}")
             except json.JSONDecodeError:
                 continue
             except RuntimeError:
                 raise
             except Exception as e:
+                import traceback
+                try:
+                    with open(os.path.join(DATA_DIR, "stream_error.log"), "w", encoding="utf-8") as f:
+                        f.write(f"Exception type: {type(e).__name__}\n")
+                        f.write(f"Exception message: {str(e)}\n")
+                        f.write(f"Traceback:\n{traceback.format_exc()}\n")
+                        f.write(f"First data line: {first_data_line or 'None'}\n")
+                        f.write(f"Line count: {line_count}\n")
+                except Exception:
+                    pass
                 raise RuntimeError(
                     f"解析 LLM 流式响应时出错：{str(e)}\n"
                     f"首条数据响应：{first_data_line or '无'}\n"

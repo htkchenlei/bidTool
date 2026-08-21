@@ -1,0 +1,38 @@
+# BidTool 基础镜像（仅构建一次）
+# 包含系统依赖和 Python 依赖，业务代码改动不会触发重新下载
+#
+# 构建命令：
+#   docker build -f Dockerfile.base -t bidtool-base:latest .
+
+FROM python:3.11-slim
+
+# 安装编译工具链和运行时系统依赖
+# - gcc: 部分 Python 包（如 cryptography）需要 C 编译
+# - libffi-dev / libssl-dev: cryptography 依赖
+# - libxml2-dev / libxslt1-dev: 可能被网页解析库依赖
+# - fonts-dejavu-core: reportlab 生成 PDF 时的基础字体
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    g++ \
+    libffi-dev \
+    libssl-dev \
+    libxml2-dev \
+    libxslt1-dev \
+    libjpeg-dev \
+    zlib1g-dev \
+    libfreetype6-dev \
+    fonts-dejavu-core \
+    && rm -rf /var/lib/apt/lists/*
+
+# 复制依赖清单（只在这一层生效，业务代码改动不会触发重新安装）
+WORKDIR /tmp
+COPY requirements.txt ./
+
+# 安装 Python 依赖 + gunicorn（生产 WSGI 服务器）
+RUN pip install --no-cache-dir -r requirements.txt gunicorn
+
+# 标记为基础镜像完成
+LABEL bidtool.base="true" \
+      bidtool.python="3.11"

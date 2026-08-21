@@ -5,6 +5,13 @@ Blueprint 架构：文件 / 分析 / 资质 / 设置
 import os
 import sys
 
+# Windows 控制台默认 GBK 编码，强制 stdout/stderr 使用 UTF-8，避免输出含特殊字符时触发 UnicodeEncodeError
+try:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+except Exception:
+    pass
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from flask import Flask, send_from_directory

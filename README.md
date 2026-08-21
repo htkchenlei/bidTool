@@ -63,6 +63,74 @@ python backend/app.py
 
 启动后浏览器访问 `http://127.0.0.1:5000`。
 
+## 🐳 Docker 部署
+
+项目采用 **基础镜像 + 应用镜像** 的双层结构，与 JobSPA 一致。依赖只在基础镜像中安装一次，后续更新业务代码只需重新构建应用镜像，秒级完成。
+
+### 文件说明
+
+| 文件 | 作用 |
+|------|------|
+| `Dockerfile.base` | 基础镜像：Python + 系统依赖 + pip 依赖（仅构建一次） |
+| `Dockerfile` | 应用镜像：基于基础镜像，仅复制业务代码 |
+| `docker-compose.yml` | 编排文件：端口、卷、健康检查 |
+| `.dockerignore` | 排除缓存、本地数据等不必要文件 |
+
+### 首次部署
+
+```bash
+# 1. 构建基础镜像（一次性，耗时较长）
+docker build -f Dockerfile.base -t bidtool-base:latest .
+
+# 2. 构建并启动应用
+docker-compose up -d --build
+```
+
+启动后访问 `http://<服务器IP>:15668`。
+
+### 后续更新（业务代码改动）
+
+```bash
+# 只需重新构建应用镜像，秒级完成（依赖已缓存在基础镜像中）
+docker-compose up -d --build
+```
+
+### 依赖变更时
+
+当 `requirements.txt` 有变化时，需重新构建基础镜像：
+
+```bash
+docker build -f Dockerfile.base -t bidtool-base:latest .
+docker-compose up -d --build
+```
+
+### 数据持久化
+
+- `data/` 目录通过 volume 挂载到宿主机 `./data`，容器重建后数据不丢失
+- 包含：项目数据、配置、上传文件、解析结果等
+
+### 端口说明
+
+| 容器端口 | 宿主机端口 | 用途 |
+|---------|-----------|------|
+| 5000 | 15668 | Web 访问（与 JobSPA 的 15667 区分） |
+
+### 常用运维命令
+
+```bash
+# 查看日志
+docker logs -f bidtool
+
+# 重启服务
+docker-compose restart
+
+# 停止服务
+docker-compose down
+
+# 进入容器调试
+docker exec -it bidtool bash
+```
+
 ## 📁 项目结构
 
 ```

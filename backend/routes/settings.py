@@ -1,6 +1,7 @@
 """
 设置 API — Blueprint
-管理多个大模型的 API 配置，包含 5 个内置模型，用户可通过"新建自定义模型"添加任意数量的兼容 OpenAI 格式的模型
+管理大模型的 API 配置。所有 API 接入点均为用户自定义，不提供内置默认模型，
+用户通过"新建自定义模型"添加任意数量的兼容 OpenAI 格式的模型。
 """
 import os
 import json
@@ -12,60 +13,9 @@ DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.
 CONFIG_FILE = os.path.join(DATA_DIR, "config.json")
 
 DEFAULT_CONFIG = {
-    "models": [
-        {
-            "id": "openai",
-            "name": "OpenAI GPT",
-            "api_key": "",
-            "base_url": "https://api.openai.com/v1",
-            "model": "gpt-4o",
-            "enabled": False,
-            "supports_vision": True,
-        },
-        {
-            "id": "deepseek",
-            "name": "DeepSeek",
-            "api_key": "",
-            "base_url": "https://api.deepseek.com",
-            "model": "deepseek-chat",
-            "enabled": False,
-            "supports_vision": False,
-        },
-        {
-            "id": "qwen",
-            "name": "阿里通义千问",
-            "api_key": "",
-            "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
-            "model": "qwen-max",
-            "enabled": False,
-            "supports_vision": False,
-        },
-        {
-            "id": "zhipu",
-            "name": "智谱 GLM",
-            "api_key": "",
-            "base_url": "https://open.bigmodel.cn/api/paas/v4",
-            "model": "glm-4-flash",
-            "enabled": False,
-            "supports_vision": False,
-        },
-        {
-            "id": "agnes",
-            "name": "Agnes 2.0 Flash",
-            "api_key": "",
-            "base_url": "https://apihub.agnes-ai.com/v1",
-            "model": "agnes-2.0-flash",
-            "enabled": False,
-            "supports_vision": True,
-            "is_free": True,
-            "description": "免费模型，支持1M超长上下文，适合长文档分析。注册地址: platform.agnes-ai.com",
-        },
-    ],
+    "models": [],
     "active_model": "",
 }
-
-# 内置模型 ID，用户不能删除这些
-BUILTIN_MODEL_IDS = {"openai", "deepseek", "qwen", "zhipu", "agnes"}
 
 
 def load_config():
@@ -73,13 +23,6 @@ def load_config():
         try:
             with open(CONFIG_FILE, "r", encoding="utf-8") as f:
                 cfg = json.load(f)
-
-            # 迁移：确保内置模型都存在（新增的内置模型自动补齐）
-            existing_ids = {m.get("id") for m in cfg.get("models", [])}
-            for default_model in DEFAULT_CONFIG["models"]:
-                if default_model["id"] not in existing_ids:
-                    cfg.setdefault("models", []).append(default_model)
-
             return cfg
         except Exception:
             pass
@@ -279,10 +222,7 @@ def create_model():
 
 @settings_bp.route("/api/settings/models/<model_id>", methods=["DELETE"])
 def delete_model(model_id):
-    """删除自定义模型（内置模型不可删除）"""
-    if model_id in BUILTIN_MODEL_IDS:
-        return jsonify({"success": False, "message": "内置模型不可删除"}), 400
-
+    """删除自定义模型"""
     cfg = load_config()
     new_models = [m for m in cfg.get("models", []) if m.get("id") != model_id]
     if len(new_models) == len(cfg.get("models", [])):

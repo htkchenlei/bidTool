@@ -1522,9 +1522,6 @@ createApp({
     };
 
     const deleteModel = async (model) => {
-      if (!model.is_custom && model.id !== 'custom') {
-        return;
-      }
       if (!confirm(`确认删除「${model.name}」？`)) return;
       try {
         const res = await fetch(`/api/settings/models/${encodeURIComponent(model.id)}`, {

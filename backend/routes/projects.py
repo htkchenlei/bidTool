@@ -1295,6 +1295,9 @@ def extract_project_info(project_id):
             break
     save_projects(projects)
 
+    # 把提取到的项目名称回写到 project.name（必须在 save_projects 之后）
+    _backfill_project_name(project_id, result.get("fields", {}))
+
     return jsonify({
         "success": True,
         "field_success": result["field_success"],
@@ -1354,6 +1357,31 @@ def _update_extracted_fields(project_id, extracted_values, source_file=None):
             fields.append(new_field)
 
     save_extracted_fields(fields)
+
+
+def _backfill_project_name(project_id, extracted_values):
+    """把提取到的项目名称回写到 project.name（保证列表/详情显示真实名称而非公告地址）。
+    单独提取出来是因为 analyze_project 在调用 _update_extracted_fields 之后还会用内存中的 projects
+    对象再次 save_projects()，如果在这里写会被后续 save_projects 覆盖掉。
+    """
+    extracted_name = (extracted_values.get("project_name") or "").strip()
+    if not extracted_name:
+        return
+    projects = load_projects()
+    for p in projects:
+        if p.get("id") == project_id:
+            current = (p.get("name") or "").strip()
+            if (
+                not current
+                or current == "未命名项目"
+                or current.startswith("http://")
+                or current.startswith("https://")
+                or current.endswith("...")
+            ):
+                p["name"] = extracted_name
+                p["updated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                save_projects(projects)
+            break
 
 
 def _save_risk_items(project_id, risks, source_file=None):
@@ -1678,6 +1706,10 @@ def analyze_project(project_id):
                 projects[i]["criteria_info"] = criteria_info
             break
     save_projects(projects)
+
+    # 最后一步：把提取到的项目名称回写到 project.name
+    # 必须在 Step 5 的 save_projects 之后调用，避免被前一次写入覆盖
+    _backfill_project_name(project_id, ai_result.get("fields", {}))
 
     return jsonify({
         "success": True,

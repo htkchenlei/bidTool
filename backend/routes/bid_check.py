@@ -285,7 +285,7 @@ def run_bid_check():
 
     return Response(
         _generate_bid_check_stream(messages, model_id, project, original_name, bid_truncated, tender_truncated),
-        content_type="text/event-stream"
+        content_type="text/event-stream; charset=utf-8"
     )
 
 

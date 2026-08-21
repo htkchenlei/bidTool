@@ -526,7 +526,7 @@ def run_bid_score():
 
     return Response(
         _generate_bid_score_stream(tender_file, tender_path, tender_file_name, saved_bid_files, model_id, upload_temp_dir, criteria_info),
-        content_type="text/event-stream"
+        content_type="text/event-stream; charset=utf-8"
     )
 
 
