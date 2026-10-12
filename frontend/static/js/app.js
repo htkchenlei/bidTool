@@ -326,15 +326,21 @@ createApp({
         try { data = JSON.parse(text); }
         catch { alert('服务器返回异常，请刷新页面后重试'); return; }
         if (!data.success) {
-          alert(data.message || '分析失败');
+          showToast(data.message || '分析失败', 'error');
           // 分析失败，恢复原状态
           if (proj) proj.status = data.status || proj.status || 'pending';
         } else {
           await loadProjects();
+          const errs = (data.ai_result && data.ai_result.errors) || [];
+          if (errs.length) {
+            showToast('分析完成，但存在错误：' + errs.join('；'), 'error');
+          } else {
+            showToast('分析完成');
+          }
         }
       } catch (e) {
         console.error('分析失败:', e);
-        alert('分析失败：' + (e.message || e));
+        showToast('分析失败：' + (e.message || e), 'error');
         // 异常时恢复原状态
         if (proj) proj.status = proj.status === 'analyzing' ? 'pending' : proj.status;
       } finally {
@@ -359,7 +365,7 @@ createApp({
         try { data = JSON.parse(text); }
         catch { alert('服务器返回异常，请重试'); return; }
         if (!data.success) {
-          alert(data.message || '重新分析失败');
+          showToast(data.message || '重新分析失败', 'error');
           // 分析失败，恢复原状态
           if (proj) proj.status = data.status || proj.status || 'completed';
           if (currentProject.value && currentProject.value.id === projectId) {
@@ -369,10 +375,16 @@ createApp({
           // 刷新当前项目详情（字段和风险）
           await openProject(projectId);
           await loadProjects();
+          const errs = (data.ai_result && data.ai_result.errors) || [];
+          if (errs.length) {
+            showToast('重新分析完成，但存在错误：' + errs.join('；'), 'error');
+          } else {
+            showToast('重新分析完成');
+          }
         }
       } catch (e) {
         console.error('重新分析失败:', e);
-        alert('重新分析失败：' + (e.message || e));
+        showToast('重新分析失败：' + (e.message || e), 'error');
         // 异常时恢复原状态
         if (proj) proj.status = proj.status === 'analyzing' ? 'completed' : proj.status;
         if (currentProject.value && currentProject.value.id === projectId) {
@@ -489,13 +501,13 @@ createApp({
     };
 
     const isUrlField = (field) => {
-      const val = field.machine_value || field.confirmed_value || '';
+      const val = field.confirmed_value || field.machine_value || '';
       if (!val || typeof val !== 'string') return false;
       return /^https?:\/\//i.test(val.trim());
     };
 
     const copyFieldValue = async (field) => {
-      const value = field.machine_value || '';
+      const value = field.confirmed_value || field.machine_value || '';
       try {
         await navigator.clipboard.writeText(value);
       } catch {
@@ -547,7 +559,7 @@ createApp({
     const currentProjectAnnouncementUrl = computed(() => {
       const f = currentProjectFields.value.find(f => f.field_key === 'announcement_url');
       if (!f) return '';
-      return f.machine_value || f.confirmed_value || '';
+      return f.confirmed_value || f.machine_value || '';
     });
 
     const displayFields = computed(() => {
@@ -1425,6 +1437,16 @@ createApp({
     });
     const saving = ref(false);
     const toastVisible = ref(false);
+    const toastMessage = ref('');
+    const toastType = ref('success'); // 'success' | 'error'
+    let toastTimer = null;
+    const showToast = (message, type = 'success') => {
+      toastMessage.value = message;
+      toastType.value = type;
+      toastVisible.value = true;
+      if (toastTimer) clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => { toastVisible.value = false; }, type === 'error' ? 6000 : 3000);
+    };
     const showKey = ref({});
     const testingModel = ref(null);
     const testResults = reactive({});
@@ -1442,6 +1464,30 @@ createApp({
     const newModelTestResult = ref(null); // { ok: bool, msg: string }
     const newModelCreating = ref(false);
     const newModelShowKey = ref(false);
+    const newModelDiscovering = ref(false);
+    const discoveredModels = ref([]);
+    const modelDropdownOpen = ref(false);
+
+    const filteredModelOptions = computed(() => {
+      const kw = (newModelForm.model || '').trim().toLowerCase();
+      if (!kw) return discoveredModels.value;
+      return discoveredModels.value.filter(m => m.toLowerCase().includes(kw));
+    });
+
+    const toggleModelDropdown = async () => {
+      // 还没查询过时，点击箭头直接自动查询
+      if (!discoveredModels.value.length) {
+        if (newModelForm.api_key && newModelForm.base_url) await discoverModels();
+        modelDropdownOpen.value = discoveredModels.value.length > 0;
+        return;
+      }
+      modelDropdownOpen.value = !modelDropdownOpen.value;
+    };
+
+    const selectModelOption = (m) => {
+      newModelForm.model = m;
+      modelDropdownOpen.value = false;
+    };
 
     const resetNewModelForm = () => {
       newModelForm.name = '';
@@ -1451,11 +1497,42 @@ createApp({
       newModelForm.supports_vision = false;
       newModelTestResult.value = null;
       newModelShowKey.value = false;
+      newModelDiscovering.value = false;
+      discoveredModels.value = [];
+      modelDropdownOpen.value = false;
     };
 
     const openNewModelModal = () => {
       resetNewModelForm();
       showNewModelModal.value = true;
+    };
+
+    const discoverModels = async () => {
+      if (!newModelForm.api_key || !newModelForm.base_url) {
+        newModelTestResult.value = { ok: false, msg: '请先填写 API Key 和 API Base URL' };
+        return;
+      }
+      newModelDiscovering.value = true;
+      try {
+        const res = await fetch('/api/settings/discover-models', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ api_key: newModelForm.api_key, base_url: newModelForm.base_url }),
+        });
+        const data = await res.json();
+        if (data.success && data.models && data.models.length) {
+          discoveredModels.value = data.models;
+          modelDropdownOpen.value = true;
+          newModelTestResult.value = { ok: true, msg: `查询到 ${data.models.length} 个模型，请从下拉列表选择` };
+        } else {
+          discoveredModels.value = [];
+          newModelTestResult.value = { ok: false, msg: data.message || '未查询到模型' };
+        }
+      } catch (e) {
+        discoveredModels.value = [];
+        newModelTestResult.value = { ok: false, msg: '查询请求失败，请检查后端服务是否运行' };
+      }
+      newModelDiscovering.value = false;
     };
 
     const testNewModel = async () => {
@@ -1508,12 +1585,12 @@ createApp({
         });
         const data = await res.json();
         if (data.success) {
-          toastVisible.value = true;
-          setTimeout(() => { toastVisible.value = false; }, 2800);
+          showToast('模型已创建');
           showNewModelModal.value = false;
           await loadConfig();
         } else {
           newModelTestResult.value = { ok: false, msg: data.message || '创建失败' };
+          showToast(data.message || '创建失败', 'error');
         }
       } catch (e) {
         newModelTestResult.value = { ok: false, msg: '网络请求失败，请检查后端服务是否运行' };
@@ -1529,13 +1606,14 @@ createApp({
         });
         const data = await res.json();
         if (data.success) {
-          toastVisible.value = true;
-          setTimeout(() => { toastVisible.value = false; }, 2800);
+          showToast('模型已删除');
           await loadConfig();
         } else {
-          alert(data.message || '删除失败');
+          showToast(data.message || '删除失败', 'error');
         }
-      } catch {}
+      } catch (e) {
+        showToast('删除失败：' + (e.message || e), 'error');
+      }
     };
 
     const loadConfig = async () => {
@@ -1605,9 +1683,10 @@ createApp({
           }),
         });
         savedActiveModel.value = activeModel.value;
-        toastVisible.value = true;
-        setTimeout(() => { toastVisible.value = false; }, 2800);
-      } catch {}
+        showToast('配置已保存');
+      } catch (e) {
+        showToast('保存失败：' + (e.message || e), 'error');
+      }
       saving.value = false;
     };
 
@@ -2353,11 +2432,12 @@ createApp({
       addCertCategory, startRenameCat, doRenameCat, deleteCertCat,
       getCertStatusClass, getCertStatusLabel, isUrlField,
       fileCount, analysisCount, certCount, perfCount, loadStats, stats, expiringSoon,
-      modelConfigs, activeModel, activeModelInfo, savedActiveModel, savedActiveModelInfo, saving, saveSettings, toastVisible, showKey, toggleKeyVisibility,
+      modelConfigs, activeModel, activeModelInfo, savedActiveModel, savedActiveModelInfo, saving, saveSettings, toastVisible, toastMessage, toastType, showToast, showKey, toggleKeyVisibility,
       testingModel, testResults, testModel,
       showNewModelModal, newModelForm, newModelTesting, newModelTestResult, newModelCreating,
-      newModelShowKey,
-      openNewModelModal, resetNewModelForm, testNewModel, createModel, deleteModel,
+      newModelShowKey, newModelDiscovering, discoveredModels,
+      modelDropdownOpen, filteredModelOptions, toggleModelDropdown, selectModelOption,
+      openNewModelModal, resetNewModelForm, testNewModel, discoverModels, createModel, deleteModel,
       updateActiveModel,
       setView,
       // 区域查询

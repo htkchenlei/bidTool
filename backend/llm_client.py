@@ -11,6 +11,8 @@ import requests
 import tempfile
 from io import BytesIO
 
+from backend.app_logger import log_error, log_info
+
 # ── 路径 ────────────────────────────────────────────────
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA_DIR = os.path.join(BASE_DIR, "data")
@@ -118,6 +120,7 @@ def call_llm(messages: list, temperature: float = 0.1, max_tokens: int = 1000, m
     """
     cfg = model_config if model_config is not None else get_active_model_config()
     if not cfg:
+        log_error("大模型调用失败：未配置或启用模型")
         raise RuntimeError("未配置或启用大模型，请先在设置中配置并启用一个模型，然后设为默认")
 
     base_url = cfg["base_url"].rstrip("/")
@@ -142,6 +145,7 @@ def call_llm(messages: list, temperature: float = 0.1, max_tokens: int = 1000, m
     try:
         resp = requests.post(url, headers=headers, json=body, timeout=240, stream=True)
     except Exception as e:
+        log_error(f"大模型 API 连接失败：{cfg.get('name','')} ({cfg.get('model','')}) @ {base_url}，错误：{str(e)[:300]}")
         raise RuntimeError(
             f"大模型 API 连接失败：{str(e)}\n"
             f"当前模型：{cfg.get('name','')} ({cfg.get('model','')})，请检查网络连接和 API 地址"
@@ -153,6 +157,7 @@ def call_llm(messages: list, temperature: float = 0.1, max_tokens: int = 1000, m
             error_msg = data.get("error", {}).get("message", str(data))
         except:
             error_msg = resp.text[:300]
+        log_error(f"大模型 API 请求失败 ({resp.status_code})：{cfg.get('name','')} ({cfg.get('model','')})，{error_msg}")
         raise RuntimeError(
             f"大模型 API 请求失败 ({resp.status_code})：{error_msg}\n"
             f"当前模型：{cfg.get('name','')} ({cfg.get('model','')})，请检查设置中的模型配置"
@@ -167,6 +172,7 @@ def call_llm(messages: list, temperature: float = 0.1, max_tokens: int = 1000, m
             if isinstance(data, dict):
                 if "error" in data:
                     error_msg = data.get("error", {}).get("message", str(data["error"]))
+                    log_error(f"模型返回错误：{cfg.get('name','')} ({cfg.get('model','')})，{error_msg}")
                     raise RuntimeError(
                         f"模型返回错误：{error_msg}\n"
                         f"当前模型：{cfg.get('name','')} ({cfg.get('model','')})"
@@ -216,6 +222,7 @@ def call_llm(messages: list, temperature: float = 0.1, max_tokens: int = 1000, m
                         )
 
         if not content:
+            log_error(f"大模型 API 响应为空：{cfg.get('name','')} ({cfg.get('model','')})")
             raise RuntimeError(
                 f"大模型 API 响应为空。\n"
                 f"当前模型：{cfg.get('name','')} ({cfg.get('model','')})"

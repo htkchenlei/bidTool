@@ -29,54 +29,117 @@ PROJECT_FILES_FILE = os.path.join(DATA_DIR, "project_files.json")
 EXTRACTED_FIELDS_FILE = os.path.join(DATA_DIR, "extracted_fields.json")
 RISK_ITEMS_FILE = os.path.join(DATA_DIR, "risk_items.json")
 
-# ── Markitdown 网页转 MD ─────────────────────────────────────
+# ── 网页转 MD：优先 markitdown，失败则 Scrapling 抓取后转 Markdown ──
+def _save_md_file(result: dict, md_content: str, url: str, project_id: str):
+    """把转换好的 Markdown 保存到 parsed 目录（供后续查看和复用）"""
+    if not project_id:
+        return
+    parsed_dir = os.path.join(PARSED_DIR, project_id)
+    os.makedirs(parsed_dir, exist_ok=True)
+    md_file_path = os.path.join(parsed_dir, "announcement.md")
+    with open(md_file_path, "w", encoding="utf-8") as f:
+        f.write(
+            f"# 公告网页内容\n\n"
+            f"**来源URL**: {url}\n"
+            f"**转换时间**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+            f"---\n\n{md_content}"
+        )
+    result["md_file_path"] = md_file_path
+
+
+def _fetch_html_with_scrapling(url: str) -> str:
+    """用 Scrapling 抓取网页原始 HTML（带伪装 UA/TLS 指纹，可绕过部分 WAF）"""
+    try:
+        from scrapling.fetchers import Fetcher
+        page = Fetcher.get(url, stealthy_headers=True, timeout=30)
+        html = getattr(page, "html_content", None)
+        if not html:
+            html = str(page)
+        return html or ""
+    except Exception:
+        return ""
+
+
+def _html_to_markdown(html_text: str) -> str:
+    """把 HTML 文本转成 Markdown（写临时 .html 文件交给 markitdown 本地转换）"""
+    if not html_text or len(html_text.strip()) < 20:
+        return ""
+    import tempfile
+    from markitdown import MarkItDown
+    tmp = tempfile.NamedTemporaryFile("w", suffix=".html", delete=False, encoding="utf-8")
+    tmp_path = tmp.name
+    try:
+        tmp.write(html_text)
+        tmp.close()
+        conv = MarkItDown().convert(tmp_path)
+        md = conv.text_content if hasattr(conv, "text_content") else str(conv)
+        return (md or "").strip()
+    except Exception:
+        return ""
+    finally:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+
+
 def convert_url_to_markdown(url: str, project_id: str = None) -> dict:
     """
-    使用 markitdown 将公告网页 URL 转换为 Markdown 格式
+    将公告网页 URL 转换为 Markdown 格式。
+    策略：优先用 markitdown 直接转换；失败（异常或结果为空）时，
+    改用 Scrapling 抓取原始 HTML 再本地转 Markdown。
     返回: {
         "success": bool,
         "markdown_content": str,
         "content_length": int,
-        "error": str or None
+        "error": str or None,
+        "engine": str  # "markitdown" | "scrapling"
     }
     """
     result = {
         "success": False,
         "markdown_content": "",
         "content_length": 0,
-        "error": None
+        "error": None,
+        "engine": "",
     }
 
+    md_content = ""
+    last_error = ""
+
+    # ── 第一优先：markitdown 直接转换 ──
     try:
         from markitdown import MarkItDown
-
-        md_converter = MarkItDown()
-        conversion_result = md_converter.convert(url)
-
-        # 提取 Markdown 文本内容
-        md_content = conversion_result.text_content if hasattr(conversion_result, 'text_content') else str(conversion_result)
-
-        if md_content and len(md_content.strip()) > 10:
+        conversion_result = MarkItDown().convert(url)
+        md_content = conversion_result.text_content if hasattr(conversion_result, "text_content") else str(conversion_result)
+        md_content = (md_content or "").strip()
+        if md_content and len(md_content) > 10:
             result["success"] = True
-            result["markdown_content"] = md_content.strip()
-            result["content_length"] = len(md_content.strip())
-
-            # 保存 MD 文件到 parsed 目录（供后续查看和复用）
-            if project_id:
-                parsed_dir = os.path.join(PARSED_DIR, project_id)
-                os.makedirs(parsed_dir, exist_ok=True)
-                md_file_path = os.path.join(parsed_dir, "announcement.md")
-                with open(md_file_path, "w", encoding="utf-8") as f:
-                    f.write(f"# 公告网页内容\n\n**来源URL**: {url}\n**转换时间**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n---\n\n{md_content}")
-                result["md_file_path"] = md_file_path
-        else:
-            result["error"] = "markitdown 转换结果为空，可能网页无法正常访问或内容过少"
-
+            result["markdown_content"] = md_content
+            result["content_length"] = len(md_content)
+            result["engine"] = "markitdown"
+            _save_md_file(result, md_content, url, project_id)
+            return result
+        last_error = "markitdown 转换结果为空，可能网页无法正常访问或内容过少"
     except ImportError:
-        result["error"] = "markitdown 库未安装，请运行: pip install markitdown"
+        last_error = "markitdown 库未安装"
     except Exception as e:
-        result["error"] = f"markitdown 转换失败: {str(e)}"
+        last_error = f"markitdown 转换失败: {str(e)}"
 
+    # ── 第二回退：Scrapling 抓 HTML 再转 Markdown ──
+    html = _fetch_html_with_scrapling(url)
+    if html:
+        md_content = _html_to_markdown(html)
+        if md_content and len(md_content) > 10:
+            result["success"] = True
+            result["markdown_content"] = md_content
+            result["content_length"] = len(md_content)
+            result["engine"] = "scrapling"
+            _save_md_file(result, md_content, url, project_id)
+            return result
+        last_error = last_error + "；Scrapling 抓取到 HTML 但转换 Markdown 为空"
+
+    result["error"] = last_error
     return result
 
 
@@ -1550,10 +1613,10 @@ def analyze_project(project_id):
             print(f"[markitdown] 转换失败: {md_result.get('error', '未知错误')}")
             # MD转换失败不阻断流程，继续用文件分析
 
-    # ═══ Step 2: 解析所有未解析的投标文件 ═══
+    # ═══ Step 2: 解析所有投标文件（重新分析时强制重解析，避免旧的 done 状态掩盖此前解析失败） ═══
     files = load_project_files()
     project_files_all = [f for f in files if f.get("project_id") == project_id]
-    files_to_parse = [f for f in project_files_all if f.get("parse_status") != "done"]
+    files_to_parse = list(project_files_all)
 
     parsed_count = 0
     parse_errors = []

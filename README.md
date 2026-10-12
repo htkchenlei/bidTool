@@ -97,12 +97,23 @@ docker-compose up -d --build
 
 ### 依赖变更时
 
-当 `requirements.txt` 有变化时，需重新构建基础镜像：
+当 `requirements.txt` 或 `Dockerfile.base` 有变化时，需重新构建基础镜像：
 
 ```bash
 docker build -f Dockerfile.base -t bidtool-base:latest .
 docker-compose up -d --build
 ```
+
+> v2.4.0 起基础镜像新增系统依赖 `antiword` / `catdoc`（用于解析旧版 `.doc` 文件），
+> 且 `requirements.txt` 中的 `scrapling` 改为 `scrapling[fetchers]`（补齐抓取所需的
+> `curl_cffi` / `playwright` / `patchright`）。**升级到 v2.4.0 必须重建基础镜像**，不能只做应用镜像增量更新。
+
+### 操作日志
+
+- 应用运行日志写入 `data/logs/bidtool.log`（随 `./data` 卷持久化，单文件 5MB 自动滚动，保留 3 份）
+- 同时输出到容器标准输出，可用 `docker logs -f bidtool` 查看
+- 记录内容：每次 API 请求（方法、路径、状态码、耗时、客户端 IP）、大模型调用与报错
+- 日志中的 API Key 已自动脱敏
 
 ### 数据持久化
 
@@ -302,6 +313,18 @@ bidToolByWorkbuddy1/
 4. **文件大小**：普通文件建议不超过 50MB；投标文件检查和模拟评分支持单文件最大 200MB
 
 ## 📝 更新日志
+
+### v2.4.0 (2026-10-12)
+
+- ✨ 支持旧版 Word（`.doc`）文件解析：多引擎转换（Word COM / LibreOffice / antiword / catdoc）
+- ✨ 新建模型时支持自动查询可用模型列表，模型名称下拉选择
+- ✨ 新增操作日志：记录每次 API 请求，写入 `data/logs/bidtool.log` 并输出到 `docker logs`
+- ✨ 大模型报错（添加模型、解析过程）统一展示到页面提示与日志，API Key 自动脱敏
+- ✨ 公告网页抓取采用「markitdown 优先，失败回退 Scrapling 抓取后转 Markdown」策略，可绕过部分 WAF
+- 🔧 修复 `.doc` 解析失败被误判为成功，导致字段全空但状态显示"已完成"
+- 🔧 修复字段卡片只显示机器提取值、人工复核值不显示的问题
+- 🔧 修复"重新分析"跳过已解析文件（旧错误状态残留）的问题
+- 🔧 修复 `scrapling` 抓取依赖缺失（`curl_cffi`/`playwright`/`patchright`）导致项目名回退为 URL 的问题
 
 ### v2.3.0 (2026-07-17)
 

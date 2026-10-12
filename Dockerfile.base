@@ -24,6 +24,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     zlib1g-dev \
     libfreetype6-dev \
     fonts-dejavu-core \
+    antiword \
+    catdoc \
     && rm -rf /var/lib/apt/lists/*
 
 # 复制依赖清单（只在这一层生效，业务代码改动不会触发重新安装）

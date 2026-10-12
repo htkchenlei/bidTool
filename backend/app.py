@@ -4,6 +4,7 @@ Blueprint 架构：文件 / 分析 / 资质 / 设置
 """
 import os
 import sys
+import time
 
 # Windows 控制台默认 GBK 编码，强制 stdout/stderr 使用 UTF-8，避免输出含特殊字符时触发 UnicodeEncodeError
 try:
@@ -14,8 +15,10 @@ except Exception:
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from flask import Flask, send_from_directory
+from flask import Flask, send_from_directory, request, g
 from flask_cors import CORS
+
+from backend.app_logger import get_logger, log_info, log_error
 
 from backend.routes.files import files_bp
 from backend.routes.analysis import analysis_bp
@@ -43,6 +46,31 @@ app = Flask(
     template_folder=TEMPLATE_DIR,
 )
 CORS(app)
+
+# ── 操作日志中间件 ──────────────────────────────────────────
+# 记录每个 API 请求：方法、路径、状态码、耗时、客户端 IP，写入日志文件并输出到控制台（docker logs 可见）
+@app.before_request
+def _log_request_start():
+    g._req_start = time.time()
+
+
+@app.after_request
+def _log_request_end(resp):
+    if request.path.startswith("/static/"):
+        return resp
+    elapsed_ms = int((time.time() - getattr(g, "_req_start", time.time())) * 1000)
+    client_ip = request.headers.get("X-Forwarded-For", request.remote_addr or "?")
+    # 只记首段 IP，去掉代理追加的列表
+    client_ip = client_ip.split(",")[0].strip()
+    log_info(f"{request.method} {request.path} -> {resp.status_code} ({elapsed_ms}ms) ip={client_ip}")
+    return resp
+
+
+@app.errorhandler(Exception)
+def _log_unhandled_error(e):
+    log_error(f"未捕获异常 {request.method} {request.path}: {type(e).__name__}: {e}")
+    # 保留 Flask 默认行为（debug 下展示调试页，生产返回 500）
+    raise e
 
 # ── 注册 Blueprint ──────────────────────────────────────────
 app.register_blueprint(files_bp)

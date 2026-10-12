@@ -36,9 +36,11 @@ def parse_file(file_path, file_type, use_markitdown=True):
     }
 
     try:
-        if use_markitdown and file_type in ["PDF", "DOC", "DOCX"]:
+        # DOC（旧版 Word 二进制）不在其列，markitdown 无法处理，直接交给本地解析器给出明确提示
+        if use_markitdown and file_type in ["PDF", "DOCX"]:
             md_result = _try_markitdown_convert(file_path, file_type)
-            if md_result["success"]:
+            md_text = (md_result.get("markdown") or "").strip()
+            if md_result["success"] and md_text and not _looks_like_error_text(md_text):
                 result["markdown"] = md_result["markdown"]
                 result["sections"] = md_result["sections"]
                 result["text"] = md_result.get("text", md_result["markdown"])
@@ -46,7 +48,9 @@ def parse_file(file_path, file_type, use_markitdown=True):
 
         if file_type == "PDF":
             result = _parse_pdf(file_path)
-        elif file_type in ["DOC", "DOCX"]:
+        elif file_type == "DOC":
+            result = _parse_doc(file_path)
+        elif file_type == "DOCX":
             result = _parse_docx(file_path)
         elif file_type == "IMAGE":
             result = _parse_image(file_path)
@@ -59,7 +63,19 @@ def parse_file(file_path, file_type, use_markitdown=True):
     except Exception as e:
         result["error"] = str(e)
 
+    # 兜底：正文为空或只是错误信息时判定为解析失败，
+    # 避免把垃圾文本当作招标文件正文送去 AI 分析（表现为字段全空但状态显示成功）
+    if not result.get("error"):
+        text = (result.get("text") or "").strip()
+        if len(text) < 5 or _looks_like_error_text(text):
+            result["error"] = "未能从文件中提取到有效文本，请确认文件是文字版（扫描件/图片型 PDF 需先做 OCR）"
+
     return result
+
+
+def _looks_like_error_text(text: str) -> bool:
+    """判断文本是否其实是某次转换的报错信息而非真实文档内容"""
+    return text.startswith(("文档转换失败", "PDF 转换失败", "Package not found", "File is not a zip file"))
 
 
 def _try_markitdown_convert(file_path, file_type):
@@ -139,9 +155,37 @@ def _parse_pdf(file_path):
     return result
 
 
+def _parse_doc(file_path):
+    """解析旧版 .doc 文件（通过多引擎转换为纯文本）"""
+    result = {"text": "", "pages": [], "tables": [], "page_count": 1, "error": None}
+
+    try:
+        from backend.doc_converter import convert_doc_to_text
+        text, error = convert_doc_to_text(file_path)
+        if error:
+            result["error"] = error
+            return result
+        if not text or not text.strip():
+            result["error"] = "转换后内容为空，可能文件损坏或为纯图片"
+            return result
+        result["text"] = text.strip()
+        result["pages"] = [{"page_no": 1, "text": result["text"]}]
+    except Exception as e:
+        result["error"] = f".doc 解析失败: {str(e)}"
+
+    return result
+
+
 def _parse_docx(file_path):
     """解析 DOCX 文件"""
     result = {"text": "", "pages": [], "tables": [], "page_count": 1, "error": None}
+
+    if os.path.splitext(file_path)[1].lower() == '.doc':
+        result["error"] = (
+            "不支持旧版 Word(.doc) 格式。请用 Word 打开后“另存为” .docx，或导出 PDF 再重新上传。"
+            "（旧 .doc 是二进制私有格式，python-docx / markitdown 均无法读取）"
+        )
+        return result
 
     try:
         from docx import Document

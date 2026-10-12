@@ -7,6 +7,8 @@ import os
 import json
 from flask import Blueprint, jsonify, request
 
+from backend.app_logger import log_error, log_info
+
 settings_bp = Blueprint("settings", __name__)
 
 DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data")
@@ -147,6 +149,7 @@ def test_model():
         elapsed = round((time.time() - t0) * 1000)  # ms
 
         if resp.status_code == 200:
+            log_info(f"测试模型连接成功：{target.get('name','') or target['model']} @ {base_url}（{elapsed}ms）")
             return jsonify({
                 "success": True,
                 "message": f"连接成功（延迟 {elapsed}ms）",
@@ -158,6 +161,7 @@ def test_model():
                 detail = resp.json().get("error", {}).get("message", "")
             except Exception:
                 detail = resp.text[:200]
+            log_error(f"测试模型连接失败：{target.get('name','') or target['model']} @ {base_url}，API 返回 {resp.status_code}：{detail or '未知错误'}")
             return jsonify({
                 "success": False,
                 "message": f"API 返回 {resp.status_code}：{detail or '未知错误'}",
@@ -165,11 +169,70 @@ def test_model():
             })
 
     except requests.exceptions.Timeout:
+        log_error(f"测试模型连接超时：{target.get('name','') or target.get('model','')} @ {base_url}")
         return jsonify({"success": False, "message": "连接超时（15 秒），请检查 API 地址和网络"})
     except requests.exceptions.ConnectionError:
+        log_error(f"测试模型无法连接：{target.get('name','') or target.get('model','')} @ {base_url}")
         return jsonify({"success": False, "message": "无法连接，请检查 API Base URL 是否正确"})
     except Exception as e:
+        log_error(f"测试模型失败：{target.get('name','') or target.get('model','')} @ {base_url}，错误：{str(e)[:300]}")
         return jsonify({"success": False, "message": f"测试失败：{str(e)}"})
+
+
+@settings_bp.route("/api/settings/discover-models", methods=["POST"])
+def discover_models():
+    """自动查询某个 API 接入点可用的模型列表（调用 OpenAI 兼容的 GET /models 接口）"""
+    import requests
+
+    data = request.get_json(silent=True) or {}
+    base_url = (data.get("base_url") or "").strip().rstrip("/")
+    api_key = (data.get("api_key") or "").strip()
+
+    if not base_url:
+        return jsonify({"success": False, "message": "请先填写 API Base URL"}), 400
+    if not api_key:
+        return jsonify({"success": False, "message": "请先填写 API Key"}), 400
+
+    headers = {"Authorization": f"Bearer {api_key}"}
+    try:
+        resp = requests.get(f"{base_url}/models", headers=headers, timeout=15)
+    except requests.exceptions.Timeout:
+        log_error(f"查询模型列表超时：{base_url}")
+        return jsonify({"success": False, "message": "查询超时（15 秒），请检查 API 地址和网络"})
+    except requests.exceptions.ConnectionError:
+        log_error(f"查询模型列表无法连接：{base_url}")
+        return jsonify({"success": False, "message": "无法连接，请检查 API Base URL 是否正确"})
+    except Exception as e:
+        log_error(f"查询模型列表失败：{base_url}，错误：{str(e)[:300]}")
+        return jsonify({"success": False, "message": f"查询失败：{str(e)}"})
+
+    if resp.status_code == 200:
+        try:
+            payload = resp.json()
+        except Exception:
+            payload = {}
+        # 兼容两种返回结构：{"data":[{"id":...}]} 或 {"object":"list","data":[...]}
+        items = payload.get("data", []) if isinstance(payload, dict) else []
+        ids = []
+        for m in items:
+            if isinstance(m, dict) and m.get("id"):
+                ids.append(m["id"])
+            elif isinstance(m, str) and m:
+                ids.append(m)
+        ids = sorted(set(ids))
+        log_info(f"查询模型列表成功：{base_url}，共 {len(ids)} 个模型")
+        return jsonify({"success": True, "models": ids})
+    else:
+        detail = ""
+        try:
+            detail = resp.json().get("error", {}).get("message", "")
+        except Exception:
+            detail = resp.text[:200]
+        log_error(f"查询模型列表失败：{base_url}，API 返回 {resp.status_code}：{detail or '未知错误'}")
+        return jsonify({
+            "success": False,
+            "message": f"查询失败（HTTP {resp.status_code}）：{detail or '该接入点不支持 /models 接口'}"
+        })
 
 
 @settings_bp.route("/api/settings/models", methods=["POST"])

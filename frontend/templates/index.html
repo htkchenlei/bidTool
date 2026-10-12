@@ -410,9 +410,9 @@
                     <input class="field-card-input" v-model="fieldEditValue" @keyup.enter="saveFieldReview(field)" @keyup.esc="editingField = null" />
                   </div>
                   <div v-else-if="isUrlField(field)" class="field-card-value">
-                    <a :href="field.machine_value || field.confirmed_value" target="_blank" rel="noopener noreferrer" class="field-card-link">{{ field.machine_value || field.confirmed_value }}</a>
+                    <a :href="field.confirmed_value || field.machine_value" target="_blank" rel="noopener noreferrer" class="field-card-link">{{ field.confirmed_value || field.machine_value }}</a>
                   </div>
-                  <div v-else class="field-card-value">{{ field.machine_value || '—' }}</div>
+                  <div v-else class="field-card-value">{{ field.confirmed_value || field.machine_value || '—' }}</div>
                   <div class="field-card-actions">
                     <button v-if="editingField === field.id" class="btn btn--sm btn--primary" @click="saveFieldReview(field)">保存</button>
                     <button v-if="editingField === field.id" class="btn btn--sm btn--ghost" @click="editingField = null">取消</button>
@@ -1387,11 +1387,12 @@
           </button>
         </div>
 
-        <!-- 保存成功提示 -->
+        <!-- 全局提示（成功/错误） -->
         <Transition name="toast-fade">
-          <div v-if="toastVisible" class="toast">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><polyline points="20,6 9,17 4,12" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            配置已保存
+          <div v-if="toastVisible" class="toast" :class="{ 'toast--error': toastType === 'error' }">
+            <svg v-if="toastType !== 'error'" width="14" height="14" viewBox="0 0 24 24" fill="none"><polyline points="20,6 9,17 4,12" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <svg v-else width="14" height="14" viewBox="0 0 24 24" fill="none"><line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/><line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg>
+            <span>{{ toastMessage }}</span>
           </div>
         </Transition>
 
@@ -1432,8 +1433,30 @@
                 </div>
                 <div class="form-group">
                   <label class="form-label">模型名称（模型 ID）<span style="color:#e5484d;">*</span></label>
-                  <input type="text" class="form-input" v-model="newModelForm.model"
-                    placeholder="例如：gpt-4o-mini、doubao-1-5-pro-32k、qwen-plus" />
+                  <div class="model-discover-row">
+                    <div class="model-combobox">
+                      <input type="text" class="form-input" v-model="newModelForm.model"
+                        @focus="modelDropdownOpen = discoveredModels.length > 0"
+                        @input="modelDropdownOpen = discoveredModels.length > 0"
+                        @blur="modelDropdownOpen = false"
+                        placeholder="例如：gpt-4o-mini，或点击右侧自动查询" />
+                      <button type="button" class="combobox-chevron" tabindex="-1"
+                        @mousedown.prevent="toggleModelDropdown"
+                        :title="discoveredModels.length ? '展开/收起模型列表' : '自动查询可用模型'">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><polyline points="6,9 12,15 18,9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                      </button>
+                      <div v-if="modelDropdownOpen && discoveredModels.length" class="model-dropdown">
+                        <div v-for="m in filteredModelOptions" :key="m" class="model-dropdown-item"
+                          @mousedown.prevent="selectModelOption(m)">{{ m }}</div>
+                        <div v-if="!filteredModelOptions.length" class="model-dropdown-empty">无匹配模型</div>
+                      </div>
+                    </div>
+                    <button type="button" class="btn btn--outline btn--sm" @click="discoverModels"
+                      :disabled="newModelDiscovering || !newModelForm.api_key || !newModelForm.base_url">
+                      {{ newModelDiscovering ? '查询中…' : '查询可用模型' }}
+                    </button>
+                  </div>
+                  <p v-if="discoveredModels.length" class="form-hint">已查询到 {{ discoveredModels.length }} 个可用模型，点击输入框或箭头选择</p>
                 </div>
                 <div class="form-group">
                   <label class="model-vision-toggle" style="display:flex;align-items:center;gap:8px;cursor:pointer;">

@@ -145,8 +145,11 @@ def _fallback_docx_to_markdown(file_path: str) -> str:
                 paragraphs.append('\n'.join([header, separator] + table_lines[1:]))
 
         return '\n\n'.join(paragraphs)
-    except Exception as e:
-        return f"文档转换失败: {str(e)}"
+    except Exception:
+        # 转换失败时返回空串，由上层判定为失败。
+        # 注意：早期这里返回的是 "文档转换失败: xxx" 字符串，会被上层当成正文，
+        # 导致错误信息被当作招标文档内容送给大模型（表现为字段全空但状态显示成功）。
+        return ''
 
 
 def _fallback_pdf_to_markdown(file_path: str) -> str:
@@ -173,8 +176,9 @@ def _fallback_pdf_to_markdown(file_path: str) -> str:
                         content.append('\n'.join([header, separator] + table_lines[1:]))
 
         return '\n\n'.join(content)
-    except Exception as e:
-        return f"PDF 转换失败: {str(e)}"
+    except Exception:
+        # 同上：失败返回空串，不能把错误文案当正文返回
+        return ''
 
 
 def extract_sections(markdown_text: str) -> List[Dict]:
